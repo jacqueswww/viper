@@ -304,8 +304,12 @@ def make_clamper(datapos, mempos, typ, is_init=False):
     else:
         data_decl = ['codeload', ['add', '~codelen', datapos]]
         copier = lambda pos, sz: ['codecopy', mempos, ['add', '~codelen', pos], sz]
+    # Create num256 -> num clamp.
+    if is_base_type(typ, 'num') and getattr(typ, 'apply_clamp', None) == 'num256':
+        return LLLnode.from_list(['uclamplt', data_decl, ['mload', MAXNUM_POS]],
+                                 typ=typ, annotation='checking num input')
     # Numbers: make sure they're in range
-    if is_base_type(typ, 'num'):
+    elif is_base_type(typ, 'num'):
         return LLLnode.from_list(['clamp', ['mload', MINNUM_POS], data_decl, ['mload', MAXNUM_POS]],
                                  typ=typ, annotation='checking num input')
     # Booleans: make sure they're zero or one
@@ -821,6 +825,8 @@ def base_type_conversion(orig, frm, to):
     elif is_base_type(frm, to.typ) and are_units_compatible(frm, to):
         return LLLnode(orig.value, orig.args, typ=to)
     elif is_base_type(frm, 'num') and is_base_type(to, 'decimal') and are_units_compatible(frm, to):
+        return LLLnode.from_list(['mul', orig, DECIMAL_DIVISOR], typ=BaseType('decimal', to.unit, to.positional))
+    elif is_base_type(frm, 'num256') and is_base_type(to, 'num'):
         return LLLnode.from_list(['mul', orig, DECIMAL_DIVISOR], typ=BaseType('decimal', to.unit, to.positional))
     elif isinstance(frm, NullType):
         if to.typ not in ('num', 'bool', 'num256', 'address', 'bytes32', 'decimal'):
