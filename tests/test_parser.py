@@ -1,196 +1,16 @@
 import pytest
 from .setup_transaction_tests import chain as s, tester as t, ethereum_utils as u, check_gas, \
-    get_contract_with_gas_estimation, get_contract
-
-def test_null_code():
-    null_code = """
-def foo():
-    pass
-    """
-    c = get_contract_with_gas_estimation(null_code)
-    c.foo()
-    print('Successfully executed a null function')
+    get_contract_with_gas_estimation, get_contract, G1, G1_times_two, G1_times_three, \
+    curve_order, negative_G1
 
 
-def test_basic_code():
-    basic_code = """
-
-def foo(x: num) -> num:
-    return x * 2
-
-    """
-    c = get_contract_with_gas_estimation(basic_code)
-    assert c.foo(9) == 18
-    print('Passed basic code test')
-
-
-def test_basic_repeater():
-    basic_repeater = """
-
-def repeat(z: num) -> num:
-    x = 0
-    for i in range(6):
-        x = x + z
-    return(x)
-    """
-    c = get_contract_with_gas_estimation(basic_repeater)
-    assert c.repeat(9) == 54
-    print('Passed basic repeater test')
-
-
-def test_more_complex_repeater():
-    more_complex_repeater = """
-def repeat() -> num:
-    out = 0
-    for i in range(6):
-        out = out * 10
-        for j in range(4):
-            out = out + j
-    return(out)
-    """
-    c = get_contract_with_gas_estimation(more_complex_repeater)
-    assert c.repeat() == 666666
-    print('Passed complex repeater test')
-
-
-def test_offset_repeater():
-    offset_repeater = """
-def sum() -> num:
-    out = 0
-    for i in range(80, 121):
-        out = out + i
-    return(out)
-    """
-
-    c = get_contract_with_gas_estimation(offset_repeater)
-    assert c.sum() == 4100
-
-    print('Passed repeater with offset test')
-
-def test_offset_repeater_2():
-    offset_repeater_2 = """
-def sum(frm: num, to: num) -> num:
-    out = 0
-    for i in range(frm, frm + 101):
-        if i == to:
-            break
-        out = out + i
-    return(out)
-    """
-
-    c = get_contract_with_gas_estimation(offset_repeater_2)
-    assert c.sum(100, 99999) == 15150
-    assert c.sum(70, 131) == 6100
-
-    print('Passed more complex repeater with offset test')
-
-
-def test_digit_reverser():
-    digit_reverser = """
-
-def reverse_digits(x: num) -> num:
-    dig: num[6]
-    z = x
-    for i in range(6):
-        dig[i] = z % 10
-        z = z / 10
-    o = 0
-    for i in range(6):
-        o = o * 10 + dig[i]
-    return o
-
-    """
-
-    c = get_contract_with_gas_estimation(digit_reverser)
-    assert c.reverse_digits(123456) == 654321
-    print('Passed digit reverser test')
-
-
-def test_state_accessor():
-    state_accessor = """
-y: num[num]
-
-def oo():
-    self.y[3] = 5
-
-def foo() -> num:
-    return self.y[3]
-
-    """
-
-    c = get_contract_with_gas_estimation(state_accessor)
-    c.oo()
-    assert c.foo() == 5
-    print('Passed basic state accessor test')
-
-
-def test_arbitration_code():
-    arbitration_code = """
-buyer: address
-seller: address
-arbitrator: address
-
-def setup(_seller: address, _arbitrator: address):
-    if not self.buyer:
-        self.buyer = msg.sender
-        self.seller = _seller
-        self.arbitrator = _arbitrator
-
-def finalize():
-    assert msg.sender == self.buyer or msg.sender == self.arbitrator
-    send(self.seller, self.balance)
-
-def refund():
-    assert msg.sender == self.seller or msg.sender == self.arbitrator
-    send(self.buyer, self.balance)
-
-    """
-
-    c = get_contract_with_gas_estimation(arbitration_code, value=1)
-    c.setup(t.a1, t.a2, sender=t.k0)
-    try:
-        c.finalize(sender=t.k1)
-        success = True
-    except:
-        success = False
-    assert not success
-    c.finalize(sender=t.k0)
-
-    print('Passed escrow test')
-
-
-def test_arbitration_code_with_init():
-    arbitration_code_with_init = """
-buyer: address
-seller: address
-arbitrator: address
-
-@payable
-def __init__(_seller: address, _arbitrator: address):
-    if not self.buyer:
-        self.buyer = msg.sender
-        self.seller = _seller
-        self.arbitrator = _arbitrator
-
-def finalize():
-    assert msg.sender == self.buyer or msg.sender == self.arbitrator
-    send(self.seller, self.balance)
-
-def refund():
-    assert msg.sender == self.seller or msg.sender == self.arbitrator
-    send(self.buyer, self.balance)
-    """
-
-    c = get_contract_with_gas_estimation(arbitration_code_with_init, args=[t.a1, t.a2], sender=t.k0, value=1)
-    try:
-        c.finalize(sender=t.k1)
-        success = True
-    except t.TransactionFailed:
-        success = False
-    assert not success
-    c.finalize(sender=t.k0)
-
-    print('Passed escrow test with initializer')
+def test_block_number():
+    block_number_code = """
+def block_number() -> num:
+    return block.number
+"""
+    c = get_contract(block_number_code)
+    c.block_number() == 2
 
 
 def test_send():
@@ -209,115 +29,6 @@ def fop():
     with pytest.raises(t.TransactionFailed):
         c.fop()
 
-
-def test_break_test():
-    break_test = """
-def log(n: num) -> num:
-    c = n * 1.0
-    output = 0
-    for i in range(400):
-        c = c / 1.2589
-        if c < 1.0:
-            output = i
-            break
-    return output
-    """
-
-    c = get_contract_with_gas_estimation(break_test)
-    assert c.log(1) == 0
-    assert c.log(2) == 3
-    assert c.log(10) == 10
-    assert c.log(200) == 23
-    print('Passed for-loop break test')
-
-def test_break_test_2():
-    break_test_2 = """
-def log(n: num) -> num:
-    c = n * 1.0
-    output = 0
-    for i in range(40):
-        if c < 10:
-            output = i * 10
-            break
-        c = c / 10
-    for i in range(10):
-        c = c / 1.2589
-        if c < 1.0:
-            output = output + i
-            break
-    return output
-    """
-
-
-    c = get_contract_with_gas_estimation(break_test_2)
-    assert c.log(1) == 0
-    assert c.log(2) == 3
-    assert c.log(10) == 10
-    assert c.log(200) == 23
-    assert c.log(4000000) == 66
-    print('Passed for-loop break test 2')
-
-def test_augassign_test():
-    augassign_test = """
-def augadd(x: num, y: num) -> num:
-    z = x
-    z += y
-    return z
-
-def augmul(x: num, y: num) -> num:
-    z = x
-    z *= y
-    return z
-
-def augsub(x: num, y: num) -> num:
-    z = x
-    z -= y
-    return z
-
-def augdiv(x: num, y: num) -> num:
-    z = x
-    z /= y
-    return z
-
-def augmod(x: num, y: num) -> num:
-    z = x
-    z %= y
-    return z
-    """
-
-    c = get_contract(augassign_test)
-
-    assert c.augadd(5, 12) == 17
-    assert c.augmul(5, 12) == 60
-    assert c.augsub(5, 12) == -7
-    assert c.augdiv(5, 12) == 0
-    assert c.augmod(5, 12) == 5
-    print('Passed aug-assignment test')
-
-def test_break_test_3():
-    break_test_3 = """
-def log(n: num) -> num:
-    c = decimal(n)
-    output = 0
-    for i in range(40):
-        if c < 10:
-            output = i * 10
-            break
-        c /= 10
-    for i in range(10):
-        c /= 1.2589
-        if c < 1:
-            output = output + i
-            break
-    return output
-    """
-    c = get_contract_with_gas_estimation(break_test_3)
-    assert c.log(1) == 0
-    assert c.log(2) == 3
-    assert c.log(10) == 10
-    assert c.log(200) == 23
-    assert c.log(4000000) == 66
-    print('Passed aug-assignment break composite test')
 
 def test_init_argument_test():
     init_argument_test = """
@@ -378,113 +89,6 @@ def returnMoose() -> num:
     print('Passed init argument and variable member test')
 
 
-def test_crowdfund():
-    crowdfund = """
-
-funders: {sender: address, value: wei_value}[num]
-nextFunderIndex: num
-beneficiary: address
-deadline: timestamp
-goal: wei_value
-refundIndex: num
-timelimit: timedelta
-
-def __init__(_beneficiary: address, _goal: wei_value, _timelimit: timedelta):
-    self.beneficiary = _beneficiary
-    self.deadline = block.timestamp + _timelimit
-    self.timelimit = _timelimit
-    self.goal = _goal
-
-@payable
-def participate():
-    assert block.timestamp < self.deadline
-    nfi = self.nextFunderIndex
-    self.funders[nfi].sender = msg.sender
-    self.funders[nfi].value = msg.value
-    self.nextFunderIndex = nfi + 1
-
-@constant
-def expired() -> bool:
-    return block.timestamp >= self.deadline
-
-@constant
-def timestamp() -> timestamp:
-    return block.timestamp
-
-@constant
-def deadline() -> timestamp:
-    return self.deadline
-
-@constant
-def timelimit() -> timedelta:
-    return self.timelimit
-
-@constant
-def reached() -> bool:
-    return self.balance >= self.goal
-
-def finalize():
-    assert block.timestamp >= self.deadline and self.balance >= self.goal
-    selfdestruct(self.beneficiary)
-
-def refund():
-    ind = self.refundIndex
-    for i in range(ind, ind + 30):
-        if i >= self.nextFunderIndex:
-            self.refundIndex = self.nextFunderIndex
-            return
-        send(self.funders[i].sender, self.funders[i].value)
-        self.funders[i].sender = 0x0000000000000000000000000000000000000000
-        self.funders[i].value = 0
-    self.refundIndex = ind + 30
-
-    """
-
-    c = get_contract(crowdfund, args=[t.a1, 50, 600])
-
-    c.participate(value=5)
-    assert c.timelimit() == 600
-    assert c.deadline() - c.timestamp() == 600
-    assert not c.expired()
-    assert not c.reached()
-    c.participate(value=49)
-    assert c.reached()
-    pre_bal = s.head_state.get_balance(t.a1)
-    s.head_state.timestamp += 1000
-    assert c.expired()
-    c.finalize()
-    post_bal = s.head_state.get_balance(t.a1)
-    assert post_bal - pre_bal == 54
-
-    c = get_contract(crowdfund, args=[t.a1, 50, 600])
-    c.participate(value=1, sender=t.k3)
-    c.participate(value=2, sender=t.k4)
-    c.participate(value=3, sender=t.k5)
-    c.participate(value=4, sender=t.k6)
-    s.head_state.timestamp += 1000
-    assert c.expired()
-    assert not c.reached()
-    pre_bals = [s.head_state.get_balance(x) for x in [t.a3, t.a4, t.a5, t.a6]]
-    c.refund()
-    post_bals = [s.head_state.get_balance(x) for x in [t.a3, t.a4, t.a5, t.a6]]
-    assert [y-x for x, y in zip(pre_bals, post_bals)] == [1, 2, 3, 4]
-
-    print('Passed composite crowdfund test')
-
-
-def test_comment_test():
-    comment_test = """
-
-def foo() -> num:
-    # Returns 3
-    return 3
-    """
-
-    c = get_contract_with_gas_estimation(comment_test)
-    assert c.foo() == 3
-    print('Passed comment test')
-
-
 def test_packing_test():
     packing_test = """
 x: num
@@ -529,265 +133,6 @@ def fop() -> num:
     assert c.foo() == 1023, c.foo()
     assert c.fop() == 1023, c.fop()
     print('Passed packing test')
-
-
-def test_multi_setter_test():
-    multi_setter_test = """
-foo: num[3]
-bar: num[3][3]
-def foo() -> num:
-    self.foo = [1, 2, 3]
-    return(self.foo[0] + self.foo[1] * 10 + self.foo[2] * 100)
-
-def fop() -> num:
-    self.bar[0] = [1, 2, 3]
-    self.bar[1] = [4, 5, 6]
-    return self.bar[0][0] + self.bar[0][1] * 10 + self.bar[0][2] * 100 + \
-        self.bar[1][0] * 1000 + self.bar[1][1] * 10000 + self.bar[1][2] * 100000
-
-def goo() -> num:
-    goo: num[3]
-    goo = [1, 2, 3]
-    return(goo[0] + goo[1] * 10 + goo[2] * 100)
-
-def gop() -> num: # Following a standard naming scheme; nothing to do with the US republican party
-    gar: num[3][3]
-    gar[0] = [1, 2, 3]
-    gar[1] = [4, 5, 6]
-    return gar[0][0] + gar[0][1] * 10 + gar[0][2] * 100 + \
-        gar[1][0] * 1000 + gar[1][1] * 10000 + gar[1][2] * 100000
-
-def hoo() -> num:
-    self.foo = None
-    return(self.foo[0] + self.foo[1] * 10 + self.foo[2] * 100)
-
-def hop() -> num:
-    self.bar[1] = None
-    return self.bar[0][0] + self.bar[0][1] * 10 + self.bar[0][2] * 100 + \
-        self.bar[1][0] * 1000 + self.bar[1][1] * 10000 + self.bar[1][2] * 100000
-
-def joo() -> num:
-    goo: num[3]
-    goo = [1, 2, 3]
-    goo = None
-    return(goo[0] + goo[1] * 10 + goo[2] * 100)
-
-def jop() -> num:
-    gar: num[3][3]
-    gar[0] = [1, 2, 3]
-    gar[1] = [4, 5, 6]
-    gar[1] = None
-    return gar[0][0] + gar[0][1] * 10 + gar[0][2] * 100 + \
-        gar[1][0] * 1000 + gar[1][1] * 10000 + gar[1][2] * 100000
-
-    """
-
-    c = get_contract(multi_setter_test)
-    assert c.foo() == 321
-    assert c.fop() == 654321
-    assert c.goo() == 321
-    assert c.gop() == 654321
-    assert c.hoo() == 0
-    assert c.hop() == 321
-    assert c.joo() == 0
-    assert c.jop() == 321
-    print('Passed multi-setter literal test')
-
-
-def test_multi_setter_struct_test():
-    multi_setter_struct_test = """
-foo: {foo: num, bar: num}[3]
-z: {foo: num[3], bar: {a: num, b: num}[2]}[2]
-
-def foo() -> num:
-    self.foo[0] = {foo: 1, bar: 2}
-    self.foo[1] = {foo: 3, bar: 4}
-    self.foo[2] = {foo: 5, bar: 6}
-    return self.foo[0].foo + self.foo[0].bar * 10 + self.foo[1].foo * 100 + \
-        self.foo[1].bar * 1000 + self.foo[2].foo * 10000 + self.foo[2].bar * 100000
-
-def fop() -> num:
-    self.z = [{foo: [1, 2, 3], bar: [{a: 4, b: 5}, {a: 2, b: 3}]},
-              {foo: [6, 7, 8], bar: [{a: 9, b: 1}, {a: 7, b: 8}]}]
-    return self.z[0].foo[0] + self.z[0].foo[1] * 10 + self.z[0].foo[2] * 100 + \
-        self.z[0].bar[0].a * 1000 + self.z[0].bar[0].b * 10000 + self.z[0].bar[1].a * 100000 + self.z[0].bar[1].b * 1000000 + \
-        self.z[1].foo[0] * 10000000 + self.z[1].foo[1] * 100000000 + self.z[1].foo[2] * 1000000000 + \
-        self.z[1].bar[0].a * 10000000000 + self.z[1].bar[0].b * 100000000000 + \
-        self.z[1].bar[1].a * 1000000000000 + self.z[1].bar[1].b * 10000000000000
-
-def goo() -> num:
-    goo: {foo: num, bar: num}[3]
-    goo[0] = {foo: 1, bar: 2}
-    goo[1] = {foo: 3, bar: 4}
-    goo[2] = {foo: 5, bar: 6}
-    return goo[0].foo + goo[0].bar * 10 + goo[1].foo * 100 + \
-        goo[1].bar * 1000 + goo[2].foo * 10000 + goo[2].bar * 100000
-
-def gop() -> num:
-    zed = [{foo: [1, 2, 3], bar: [{a: 4, b: 5}, {a: 2, b: 3}]},
-           {foo: [6, 7, 8], bar: [{a: 9, b: 1}, {a: 7, b: 8}]}]
-    return zed[0].foo[0] + zed[0].foo[1] * 10 + zed[0].foo[2] * 100 + \
-        zed[0].bar[0].a * 1000 + zed[0].bar[0].b * 10000 + zed[0].bar[1].a * 100000 + zed[0].bar[1].b * 1000000 + \
-        zed[1].foo[0] * 10000000 + zed[1].foo[1] * 100000000 + zed[1].foo[2] * 1000000000 + \
-        zed[1].bar[0].a * 10000000000 + zed[1].bar[0].b * 100000000000 + \
-        zed[1].bar[1].a * 1000000000000 + zed[1].bar[1].b * 10000000000000
-    """
-
-    c = get_contract(multi_setter_struct_test)
-    assert c.foo() == 654321
-    assert c.fop() == 87198763254321
-    assert c.goo() == 654321
-    assert c.gop() == 87198763254321
-
-    print('Passed multi-setter struct test')
-
-
-def test_type_converter_setter_test():
-    type_converter_setter_test = """
-mom: {a: {c: num}[3], b: num}
-non: {a: {c: decimal}[3], b:num}
-pop: decimal[2][2]
-
-def foo() -> num:
-    self.mom = {a: [{c: 1}, {c: 2}, {c: 3}], b: 4}
-    self.non = self.mom
-    return floor(self.non.a[0].c + self.non.a[1].c * 10 + self.non.a[2].c * 100 + self.non.b * 1000)
-
-def goo() -> num:
-    self.pop = [[1, 2], [3, 4.0]]
-    return floor(self.pop[0][0] + self.pop[0][1] * 10 + self.pop[1][0] * 100 + self.pop[1][1] * 1000)
-    """
-
-    c = get_contract(type_converter_setter_test)
-    assert c.foo() == 4321
-    assert c.foo() == 4321
-    print('Passed type-conversion struct test')
-
-
-def test_composite_setter_test():
-    composite_setter_test = """
-mom: {a: {c: num}[3], b:num}
-qoq: {c: num}
-def foo() -> num:
-    self.mom = {a: [{c: 1}, {c: 2}, {c: 3}], b: 4}
-    non = {c: 5}
-    self.mom.a[0] = non
-    non = {c: 6}
-    self.mom.a[2] = non
-    return self.mom.a[0].c + self.mom.a[1].c * 10 + self.mom.a[2].c * 100 + self.mom.b * 1000
-
-def fop() -> num:
-    popp = {a: [{c: 1}, {c: 2}, {c: 3}], b: 4}
-    self.qoq = {c: 5}
-    popp.a[0] = self.qoq
-    self.qoq = {c: 6}
-    popp.a[2] = self.qoq
-    return popp.a[0].c + popp.a[1].c * 10 + popp.a[2].c * 100 + popp.b * 1000
-
-def foq() -> num:
-    popp = {a: [{c: 1}, {c: 2}, {c: 3}], b: 4}
-    popp.a[0] = None
-    popp.a[2] = None
-    return popp.a[0].c + popp.a[1].c * 10 + popp.a[2].c * 100 + popp.b * 1000
-    """
-
-    c = get_contract(composite_setter_test)
-    assert c.foo() == 4625
-    assert c.fop() == 4625
-    assert c.foq() == 4020
-    print('Passed composite struct test')
-
-
-def test_crowdfund2():
-    crowdfund2 = """
-
-funders: {sender: address, value: wei_value}[num]
-nextFunderIndex: num
-beneficiary: address
-deadline: timestamp
-goal: wei_value
-refundIndex: num
-timelimit: timedelta
-
-def __init__(_beneficiary: address, _goal: wei_value, _timelimit: timedelta):
-    self.beneficiary = _beneficiary
-    self.deadline = block.timestamp + _timelimit
-    self.timelimit = _timelimit
-    self.goal = _goal
-
-@payable
-def participate():
-    assert block.timestamp < self.deadline
-    nfi = self.nextFunderIndex
-    self.funders[nfi] = {sender: msg.sender, value: msg.value}
-    self.nextFunderIndex = nfi + 1
-
-@constant
-def expired() -> bool:
-    return block.timestamp >= self.deadline
-
-@constant
-def timestamp() -> timestamp:
-    return block.timestamp
-
-@constant
-def deadline() -> timestamp:
-    return self.deadline
-
-@constant
-def timelimit() -> timedelta:
-    return self.timelimit
-
-@constant
-def reached() -> bool:
-    return self.balance >= self.goal
-
-def finalize():
-    assert block.timestamp >= self.deadline and self.balance >= self.goal
-    selfdestruct(self.beneficiary)
-
-def refund():
-    ind = self.refundIndex
-    for i in range(ind, ind + 30):
-        if i >= self.nextFunderIndex:
-            self.refundIndex = self.nextFunderIndex
-            return
-        send(self.funders[i].sender, self.funders[i].value)
-        self.funders[i] = None
-    self.refundIndex = ind + 30
-
-    """
-
-    c = get_contract(crowdfund2, args=[t.a1, 50, 600])
-
-    c.participate(value=5)
-    assert c.timelimit() == 600
-    assert c.deadline() - c.timestamp() == 600
-    assert not c.expired()
-    assert not c.reached()
-    c.participate(value=49)
-    assert c.reached()
-    pre_bal = s.head_state.get_balance(t.a1)
-    s.head_state.timestamp += 1000
-    assert c.expired()
-    c.finalize()
-    post_bal = s.head_state.get_balance(t.a1)
-    assert post_bal - pre_bal == 54
-
-    c = get_contract(crowdfund2, args=[t.a1, 50, 600])
-    c.participate(value=1, sender=t.k3)
-    c.participate(value=2, sender=t.k4)
-    c.participate(value=3, sender=t.k5)
-    c.participate(value=4, sender=t.k6)
-    s.head_state.timestamp += 1000
-    assert c.expired()
-    assert not c.reached()
-    pre_bals = [s.head_state.get_balance(x) for x in [t.a3, t.a4, t.a5, t.a6]]
-    c.refund()
-    post_bals = [s.head_state.get_balance(x) for x in [t.a3, t.a4, t.a5, t.a6]]
-    assert [y-x for x, y in zip(pre_bals, post_bals)] == [1, 2, 3, 4]
-
-    print('Passed second composite crowdfund test')
 
 
 def test_test_slice():
@@ -1299,49 +644,6 @@ def voo(inp: bytes <= 1024) -> num:
     print('Passed RLP decoder tests')
 
 
-def test_getter_code():
-    getter_code = """
-x: public(wei_value)
-y: public(num[5])
-z: public(bytes <= 100)
-w: public({
-    a: wei_value,
-    b: num[7],
-    c: bytes <= 100,
-    d: num[address],
-    e: num[3][3],
-    f: timestamp,
-    g: wei_value
-}[num])
-
-def __init__():
-    self.x = as_wei_value(7, wei)
-    self.y[1] = 9
-    self.z = "cow"
-    self.w[1].a = 11
-    self.w[1].b[2] = 13
-    self.w[1].c = "horse"
-    self.w[1].d[0x1234567890123456789012345678901234567890] = 15
-    self.w[2].e[1][2] = 17
-    self.w[3].f = 750
-    self.w[3].g = 751
-    """
-
-    c = get_contract(getter_code)
-    assert c.get_x() == 7
-    assert c.get_y(1) == 9
-    assert c.get_z() == b"cow"
-    assert c.get_w__a(1) == 11
-    assert c.get_w__b(1, 2) == 13
-    assert c.get_w__c(1) == b"horse"
-    assert c.get_w__d(1, "0x1234567890123456789012345678901234567890") == 15
-    assert c.get_w__e(2, 1, 2) == 17
-    assert c.get_w__f(3) == 750
-    assert c.get_w__g(3) == 751
-
-    print('Passed getter tests')
-
-
 def test_konkat_code():
     konkat_code = """
 ecks: bytes32
@@ -1364,24 +666,6 @@ def hoo(x: bytes32, y: bytes32) -> bytes <= 64:
     assert c.hoo(b'\x35' * 32, b'\x00' * 32) == b'\x35' * 32 + b'\x00' * 32
 
     print('Passed second concat tests')
-
-
-def test_conditional_return_code():
-    conditional_return_code = """
-def foo(i: bool) -> num:
-    if i:
-        return 5
-    else:
-        assert 2
-        return 7
-    return 11
-    """
-
-    c = get_contract_with_gas_estimation(conditional_return_code)
-    assert c.foo(True) == 5
-    assert c.foo(False) == 7
-
-    print('Passed conditional return tests')
 
 
 def test_large_input_code():
@@ -1421,35 +705,7 @@ def foo() -> num:
     print('Passed invalid input tests')
 
 
-def test_loggy_code():
-    loggy_code = """
-s: bytes <= 100
 
-def foo():
-    raw_log([], "moo")
-
-def goo():
-    raw_log([0x1234567812345678123456781234567812345678123456781234567812345678], "moo2")
-
-def hoo():
-    self.s = "moo3"
-    raw_log([], self.s)
-
-def ioo(inp: bytes <= 100):
-    raw_log([], inp)
-    """
-
-    c = get_contract(loggy_code)
-    c.foo()
-    assert s.head_state.receipts[-1].logs[0].data == b'moo'
-    c.goo()
-    assert s.head_state.receipts[-1].logs[0].data == b'moo2'
-    assert s.head_state.receipts[-1].logs[0].topics == [0x1234567812345678123456781234567812345678123456781234567812345678]
-    c.hoo()
-    assert s.head_state.receipts[-1].logs[0].data == b'moo3'
-    c.ioo(b"moo4")
-    assert s.head_state.receipts[-1].logs[0].data == b'moo4'
-    print("Passed raw log tests")
 
 
 def test_test_bitwise():
@@ -1489,43 +745,6 @@ def _shift(x: num256, y: num) -> num256:
     print("Passed bitwise operation tests")
 
 
-def test_selfcall_code():
-    selfcall_code = """
-def foo() -> num:
-    return 3
-
-def bar() -> num:
-    return self.foo()
-    """
-
-    c = get_contract(selfcall_code)
-    assert c.bar() == 3
-
-    print("Passed no-argument self-call test")
-
-
-def test_selfcall_code_2():
-    selfcall_code_2 = """
-def double(x: num) -> num:
-    return x * 2
-
-def returnten() -> num:
-    return self.double(5)
-
-def _hashy(x: bytes32) -> bytes32:
-    return sha3(x)
-
-def return_hash_of_rzpadded_cow() -> bytes32:
-    return self._hashy(0x636f770000000000000000000000000000000000000000000000000000000000)
-    """
-
-    c = get_contract(selfcall_code_2)
-    assert c.returnten() == 10
-    assert c.return_hash_of_rzpadded_cow() == u.sha3(b'cow' + b'\x00' * 29)
-
-    print("Passed single fixed-size argument self-call test")
-
-
 def test_selfcall_code_3():
     selfcall_code_3 = """
 def _hashy2(x: bytes <= 100) -> bytes32:
@@ -1546,102 +765,6 @@ def returnten() -> num:
     assert c.returnten() == 10
 
     print("Passed single variable-size argument self-call test")
-
-
-def test_selfcall_code_4():
-    selfcall_code_4 = """
-def summy(x: num, y: num) -> num:
-    return x + y
-
-def catty(x: bytes <= 5, y: bytes <= 5) -> bytes <= 10:
-    return concat(x, y)
-
-def slicey1(x: bytes <= 10, y: num) -> bytes <= 10:
-    return slice(x, start=0, len=y)
-
-def slicey2(y: num, x: bytes <= 10) -> bytes <= 10:
-    return slice(x, start=0, len=y)
-
-def returnten() -> num:
-    return self.summy(3, 7)
-
-def return_mongoose() -> bytes <= 10:
-    return self.catty("mon", "goose")
-
-def return_goose() -> bytes <= 10:
-    return self.slicey1("goosedog", 5)
-
-def return_goose2() -> bytes <= 10:
-    return self.slicey2(5, "goosedog")
-    """
-
-    c = get_contract(selfcall_code_4)
-    assert c.returnten() == 10
-    assert c.return_mongoose() == b"mongoose"
-    assert c.return_goose() == b"goose"
-    assert c.return_goose2() == b"goose"
-
-    print("Passed multi-argument self-call test")
-
-def test_selfcall_code_5():
-    selfcall_code_5 = """
-counter: num
-
-def increment():
-    self.counter += 1
-
-def returnten() -> num:
-    for i in range(10):
-        self.increment()
-    return self.counter
-    """
-    c = get_contract(selfcall_code_5)
-    assert c.returnten() == 10
-
-    print("Passed self-call statement test")
-
-
-def test_selfcall_code_6():
-    selfcall_code_6 = """
-excls: bytes <= 32
-
-def set_excls(arg: bytes <= 32):
-    self.excls = arg
-
-def underscore() -> bytes <= 1:
-    return "_"
-
-def hardtest(x: bytes <= 100, y: num, z: num, a: bytes <= 100, b: num, c: num) -> bytes <= 201:
-    return concat(slice(x, start=y, len=z), self.underscore(), slice(a, start=b, len=c))
-
-def return_mongoose_revolution_32_excls() -> bytes <= 201:
-    self.set_excls("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-    return self.hardtest("megamongoose123", 4, 8, concat("russian revolution", self.excls), 8, 42)
-    """
-
-    c = get_contract(selfcall_code_6)
-    assert c.return_mongoose_revolution_32_excls() == b"mongoose_revolution" + b"!" * 32
-
-    print("Passed composite self-call test")
-
-
-def test_clamper_test_code():
-    clamper_test_code = """
-def foo(s: bytes <= 3) -> bytes <= 3:
-    return s
-    """
-
-    c = get_contract(clamper_test_code, value=1)
-    assert c.foo(b"ca") == b"ca"
-    assert c.foo(b"cat") == b"cat"
-    try:
-        c.foo(b"cate")
-        success = True
-    except t.TransactionFailed:
-        success = False
-    assert not success
-
-    print("Passed bytearray clamping test")
 
 
 def test_multiple_levels():
@@ -1704,22 +827,6 @@ def create_and_return_forwarder(inp: address) -> address:
     print('Passed forwarder exception test')
 
 
-def test_internal_test():
-    internal_test = """
-@internal
-def a() -> num:
-    return 5
-
-def returnten() -> num:
-    return self.a() * 2
-    """
-
-    c = get_contract(internal_test)
-    assert c.returnten() == 10
-
-    print("Passed internal function test")
-
-
 def test_minmax():
     minmax_test = """
 def foo() -> decimal:
@@ -1734,3 +841,73 @@ def goo() -> num256:
     assert c.goo() == 83
 
     print("Passed min/max test")
+
+def test_ecadd():
+    ecadder = """
+x3: num256[2]
+y3: num256[2]
+    
+def _ecadd(x: num256[2], y: num256[2]) -> num256[2]:
+    return ecadd(x, y)
+
+def _ecadd2(x: num256[2], y: num256[2]) -> num256[2]:
+    x2 = x
+    y2 = [y[0], y[1]]
+    return ecadd(x2, y2)
+
+def _ecadd3(x: num256[2], y: num256[2]) -> num256[2]:
+    self.x3 = x
+    self.y3 = [y[0], y[1]]
+    return ecadd(self.x3, self.y3)
+
+    """
+    c = get_contract(ecadder)
+
+    # UNCOMMENT WHEN NEXT VERSION OF ETHEREUM IS RELEASED (these tests should pass then)
+    # assert c._ecadd(G1, G1) == G1_times_two
+    # assert c._ecadd2(G1, G1_times_two) == G1_times_three
+    # assert c._ecadd3(G1, [0, 0]) == G1
+    # assert c._ecadd3(G1, negative_G1) == [0, 0]
+
+def test_ecmul():
+    ecmuller = """
+x3: num256[2]
+y3: num256
+    
+def _ecmul(x: num256[2], y: num256) -> num256[2]:
+    return ecmul(x, y)
+
+def _ecmul2(x: num256[2], y: num256) -> num256[2]:
+    x2 = x
+    y2 = y
+    return ecmul(x2, y2)
+
+def _ecmul3(x: num256[2], y: num256) -> num256[2]:
+    self.x3 = x
+    self.y3 = y
+    return ecmul(self.x3, self.y3)
+
+"""
+    c = get_contract(ecmuller)
+
+    # UNCOMMENT WHEN NEXT VERSION OF ETHEREUM IS RELEASED (these tests should pass then)
+    # assert c._ecmul(G1, 0) == [0 ,0]
+    # assert c._ecmul(G1, 1) == G1
+    # assert c._ecmul(G1, 3) == G1_times_three
+    # assert c._ecmul(G1, curve_order - 1) == negative_G1
+    # assert c._ecmul(G1, curve_order) == [0, 0]
+
+def test_modmul():
+    modexper = """
+def exp(base: num256, exponent: num256, modulus: num256) -> num256:
+      o = as_num256(1)
+      for i in range(256):
+          o = num256_mulmod(o, o, modulus)
+          if bitwise_and(exponent, shift(as_num256(1), 255 - i)) != as_num256(0):
+              o = num256_mulmod(o, base, modulus)
+      return o
+    """
+
+    c = get_contract(modexper)
+    assert c.exp(3, 5, 100) == 43
+    assert c.exp(2, 997, 997) == 2

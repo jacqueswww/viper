@@ -15,11 +15,14 @@ from .parser_utils import (
     getpos,
     make_byte_array_copier,
     make_byte_slice_copier,
+    add_variable_offset,
+    unwrap_location
 )
 from .types import (
     BaseType,
     ByteArrayType,
     TupleType,
+    ListType
 )
 from .types import (
     are_units_compatible,
@@ -56,17 +59,20 @@ def process_arg(index, arg, expected_arg_typelist, function_name, context):
         expected_arg_typelist = (expected_arg_typelist, )
     vsub = None
     for expected_arg in expected_arg_typelist:
-        if expected_arg == 'num_literal' and isinstance(arg, ast.Num) and get_original_if_0x_prefixed(arg, context) is None:
-            return arg.n
-        elif expected_arg == 'str_literal' and isinstance(arg, ast.Str) and get_original_if_0x_prefixed(arg, context) is None:
-            bytez = b''
-            for c in arg.s:
-                if ord(c) >= 256:
-                    raise InvalidLiteralException("Cannot insert special character %r into byte array" % c, arg)
-                bytez += bytes([ord(c)])
-            return bytez
-        elif expected_arg == 'name_literal' and isinstance(arg, ast.Name):
-            return arg.id
+        if expected_arg == 'num_literal':
+            if isinstance(arg, ast.Num) and get_original_if_0x_prefixed(arg, context) is None:
+                return arg.n
+        elif expected_arg == 'str_literal':
+            if isinstance(arg, ast.Str) and get_original_if_0x_prefixed(arg, context) is None:
+                bytez = b''
+                for c in arg.s:
+                    if ord(c) >= 256:
+                        raise InvalidLiteralException("Cannot insert special character %r into byte array" % c, arg)
+                    bytez += bytes([ord(c)])
+                return bytez
+        elif expected_arg == 'name_literal':
+            if isinstance(arg, ast.Name):
+                return arg.id
         elif expected_arg == '*':
             return arg
         elif expected_arg == 'bytes':
@@ -74,9 +80,16 @@ def process_arg(index, arg, expected_arg_typelist, function_name, context):
             if isinstance(sub.typ, ByteArrayType):
                 return sub
         else:
-            vsub = vsub or parse_value_expr(arg, context)
-            if is_base_type(vsub.typ, expected_arg):
-                return vsub
+            # Does not work for unit-endowed types inside compound types, eg. timestamp[2]
+            parsed_expected_type = parse_type(ast.parse(expected_arg).body[0].value, 'memory')
+            if isinstance(parsed_expected_type, BaseType):
+                vsub = vsub or parse_value_expr(arg, context)
+                if is_base_type(vsub.typ, expected_arg):
+                    return vsub
+            else:
+                vsub = vsub or parse_expr(arg, context)
+                if vsub.typ == parsed_expected_type:
+                    return parse_expr(arg, context)
     if len(expected_arg_typelist) == 1:
         raise TypeMismatchException("Expecting %s for argument %r of %s" %
                                     (expected_arg, index, function_name), arg)
@@ -334,6 +347,41 @@ def ecrecover(expr, args, kwargs, context):
                               ['mstore', ['add', placeholder_node, 96], args[3]],
                               ['pop', ['call', 3000, 1, 0, placeholder_node, 128, FREE_VAR_SPACE, 32]],
                               ['mload', FREE_VAR_SPACE]], typ=BaseType('address'), pos=getpos(expr))
+
+
+def avo(arg, ind):
+    return unwrap_location(add_variable_offset(arg, LLLnode.from_list(ind, 'num')))
+
+
+@signature('num256[2]', 'num256[2]')
+def ecadd(expr, args, kwargs, context):
+    placeholder_node = LLLnode.from_list(
+        context.new_placeholder(ByteArrayType(128)), typ=ByteArrayType(128), location='memory'
+    )
+
+    o = LLLnode.from_list(['seq',
+                              ['mstore', placeholder_node, avo(args[0], 0)],
+                              ['mstore', ['add', placeholder_node, 32], avo(args[0], 1)],
+                              ['mstore', ['add', placeholder_node, 64], avo(args[1], 0)],
+                              ['mstore', ['add', placeholder_node, 96], avo(args[1], 1)],
+                              ['assert', ['call', 500, 6, 0, placeholder_node, 128, placeholder_node, 64]],
+                              placeholder_node], typ=ListType(BaseType('num256'), 2), pos=getpos(expr), location='memory')
+    return o
+
+
+@signature('num256[2]', 'num256')
+def ecmul(expr, args, kwargs, context):
+    placeholder_node = LLLnode.from_list(
+        context.new_placeholder(ByteArrayType(128)), typ=ByteArrayType(128), location='memory'
+    )
+
+    o = LLLnode.from_list(['seq',
+                              ['mstore', placeholder_node, avo(args[0], 0)],
+                              ['mstore', ['add', placeholder_node, 32], avo(args[0], 1)],
+                              ['mstore', ['add', placeholder_node, 64], args[1]],
+                              ['assert', ['call', 40000, 7, 0, placeholder_node, 96, placeholder_node, 64]],
+                              placeholder_node], typ=ListType(BaseType('num256'), 2), pos=getpos(expr), location='memory')
+    return o
 
 
 @signature('bytes', 'num', type=Optional('name_literal', 'bytes32'))
@@ -626,8 +674,23 @@ def num256_div(expr, args, kwargs, context):
 
 
 @signature('num256', 'num256')
+def num256_exp(expr, args, kwargs, context):
+    return LLLnode.from_list(['exp', args[0], args[1]], typ=BaseType('num256'), pos=getpos(expr))
+
+
+@signature('num256', 'num256')
 def num256_mod(expr, args, kwargs, context):
     return LLLnode.from_list(['mod', args[0], args[1]], typ=BaseType('num256'), pos=getpos(expr))
+
+
+@signature('num256', 'num256', 'num256')
+def num256_addmod(expr, args, kwargs, context):
+    return LLLnode.from_list(['addmod', args[0], args[1], args[2]], typ=BaseType('num256'), pos=getpos(expr))
+
+
+@signature('num256', 'num256', 'num256')
+def num256_mulmod(expr, args, kwargs, context):
+    return LLLnode.from_list(['mulmod', args[0], args[1], args[2]], typ=BaseType('num256'), pos=getpos(expr))
 
 
 @signature('num256')
@@ -735,6 +798,8 @@ dispatch_table = {
     'method_id': method_id,
     'keccak256': _sha3,
     'ecrecover': ecrecover,
+    'ecadd': ecadd,
+    'ecmul': ecmul,
     'extract32': extract32,
     'bytes_to_num': bytes_to_num,
     'as_wei_value': as_wei_value,
@@ -749,7 +814,10 @@ dispatch_table = {
     'num256_sub': num256_sub,
     'num256_mul': num256_mul,
     'num256_div': num256_div,
+    'num256_exp': num256_exp,
     'num256_mod': num256_mod,
+    'num256_addmod': num256_addmod,
+    'num256_mulmod': num256_mulmod,
     'num256_gt': num256_gt,
     'num256_ge': num256_ge,
     'num256_lt': num256_lt,

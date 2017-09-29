@@ -52,3 +52,37 @@ def _num256_le(x: num256, y: num256) -> bool:
     assert c._num256_lt(y, x) is True
 
     print("Passed num256 operation tests")
+
+
+def test_num256_with_exponents():
+    exp_code = """
+def _num256_exp(x: num256, y: num256) -> num256:
+        return num256_exp(x,y)
+    """
+
+    c = get_contract(exp_code)
+    assert c._num256_exp(2, 3) == 8
+    assert c._num256_exp(2**128, 2) == 0
+    assert c._num256_exp(2**64, 2) == 2**128
+    assert c._num256_exp(7**23, 3) == 7**69
+
+
+def test_clamp_decorator_success():
+    clamp_code = """
+@num256_to_num('x', 'y', '')
+def multiply(x: num, y: num) -> num:
+    return x * y
+    """
+
+    c = get_contract(clamp_code)
+    assert c.multiply(3, 3) == 9
+
+
+def test_clamp_decorator_invalid_var_name():
+    """ If invalid variable name is passwed to the decorator, fail."""
+    clamp_code = """
+@num256_to_num('z')
+def multiply(x: num, y: num) -> num:
+    return x * y
+"""
+    c = get_contract(clamp_code)
