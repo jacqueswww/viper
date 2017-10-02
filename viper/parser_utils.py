@@ -18,7 +18,7 @@ from .types import (
     get_size_of_type
 )
 
-from .utils import MemoryPositions
+from .utils import MemoryPositions, DECIMAL_DIVISOR
 from .utils import ceil32
 
 
