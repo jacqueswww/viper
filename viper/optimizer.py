@@ -1,25 +1,19 @@
 from .parser_utils import LLLnode
-from .utils import (
-    ADDRSIZE_POS,
-    DECIMAL_DIVISOR,
-    MAXDECIMAL_POS,
-    MAXNUM_POS,
-    MINDECIMAL_POS,
-    MINNUM_POS,
-)
+from .utils import MemoryPositions, TypeLimitValues
 
 
 def get_int_at(args, pos, signed=False):
+    ints_in_memory = {
+        MemoryPositions.ADDRSIZE: TypeLimitValues.ADDRSIZE,
+        MemoryPositions.MAXNUM: TypeLimitValues.MAXNUM,
+        MemoryPositions.MINNUM: TypeLimitValues.MINNUM,
+        MemoryPositions.MAXDECIMAL: TypeLimitValues.MAXDECIMAL,
+        MemoryPositions.MINDECIMAL: TypeLimitValues.MINDECIMAL,
+    }
     if isinstance(args[pos].value, int):
         o = args[pos].value
-    elif args[pos].value == "mload" and args[pos].args[0].value in (ADDRSIZE_POS, MAXNUM_POS, MINNUM_POS, MAXDECIMAL_POS, MINDECIMAL_POS):
-        o = {
-            ADDRSIZE_POS: 2**160,
-            MAXNUM_POS: 2**128 - 1,
-            MINNUM_POS: -2**128 + 1,
-            MAXDECIMAL_POS: (2**128 - 1) * DECIMAL_DIVISOR,
-            MINDECIMAL_POS: (-2**128 + 1) * DECIMAL_DIVISOR,
-        }[args[pos].args[0].value]
+    elif args[pos].value == "mload" and args[pos].args[0].value in ints_in_memory.keys():
+        o = ints_in_memory[args[pos].args[0].value]
     else:
         return None
     if signed:

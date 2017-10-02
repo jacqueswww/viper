@@ -54,16 +54,27 @@ def calc_mem_gas(memsize):
 # A decimal value can store multiples of 1/DECIMAL_DIVISOR
 DECIMAL_DIVISOR = 10000000000
 
+
 # Number of bytes in memory used for system purposes, not for variables
-RESERVED_MEMORY = 320
-ADDRSIZE_POS = 32
-MAXNUM_POS = 64
-MINNUM_POS = 96
-MAXDECIMAL_POS = 128
-MINDECIMAL_POS = 160
-FREE_VAR_SPACE = 192
-BLANK_SPACE = 224
-FREE_LOOP_INDEX = 256
+class MemoryPositions:
+    RESERVED_MEMORY = 320
+    ADDRSIZE = 32
+    MAXNUM = 64
+    MINNUM = 96
+    MAXDECIMAL = 128
+    MINDECIMAL = 160
+    FREE_VAR_SPACE = 192
+    BLANK_SPACE = 224
+    FREE_LOOP_INDEX = 256
+
+
+class TypeLimitValues:
+    ADDRSIZE = 2 ** 160
+    MAXNUM = 2 ** 128 - 1
+    MINNUM = -2 ** 128
+    MAXDECIMAL = (2 ** 127 - 1) * DECIMAL_DIVISOR
+    MINDECIMAL = (2 ** 127) * DECIMAL_DIVISOR
+
 
 RLP_DECODER_ADDRESS = hex_to_int('0xCb969cAAad21A78a24083164ffa81604317Ab603'[2:])
 
