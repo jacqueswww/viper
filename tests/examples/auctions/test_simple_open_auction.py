@@ -35,7 +35,7 @@ def test_initial_state(auction_tester):
     assert auction_tester.c.get_ended() == False
     # Check highest bidder is empty
     assert auction_tester.c.get_highest_bidder() == '0x0000000000000000000000000000000000000000'
-    # Check highest bid is 0
+    # Check highest bid is 0typ
     assert auction_tester.c.get_highest_bid() == 0
 
 

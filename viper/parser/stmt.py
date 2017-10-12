@@ -20,6 +20,7 @@ from viper.types import (
     BaseType,
     ByteArrayType,
     ListType,
+    TupleType
 )
 from viper.types import (
     get_size_of_type,
@@ -265,7 +266,7 @@ class Stmt(object):
                 return LLLnode.from_list(o, typ=None, pos=getpos(self.stmt))
             else:
                 raise Exception("Invalid location: %s" % sub.location)
-        # Returning a list
+
         elif isinstance(sub.typ, ListType):
             if sub.location == "memory" and sub.value != "multi":
                 return LLLnode.from_list(['return', sub, get_size_of_type(self.context.return_type) * 32],
@@ -275,5 +276,18 @@ class Stmt(object):
                 setter = make_setter(new_sub, sub, 'memory')
                 return LLLnode.from_list(['seq', setter, ['return', new_sub, get_size_of_type(self.context.return_type) * 32]],
                                             typ=None, pos=getpos(self.stmt))
+
+        # Returning a tuple.
+        elif isinstance(sub.typ, TupleType):
+
+            if sub.location == "memory" and sub.value != "multi":
+                return LLLnode.from_list(['return', sub, get_size_of_type(self.context.return_type) * 32],
+                            typ=None, pos=getpos(self.stmt))
+            else:
+                new_sub = LLLnode.from_list(self.context.new_placeholder(self.context.return_type), typ=self.context.return_type, location='memory')
+                setter = make_setter(new_sub, sub, 'memory')
+                return LLLnode.from_list(['seq', setter, ['return', new_sub, get_size_of_type(self.context.return_type) * 32]],
+                                            typ=None, pos=getpos(self.stmt))
+
         else:
             raise TypeMismatchException("Can only return base type!", self.stmt)
