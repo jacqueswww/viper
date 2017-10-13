@@ -16,7 +16,7 @@ def foo(arg1: address) -> bool:
 """
     c1 = get_contract(contract_1)
     c2 = get_contract(contract_2)
-    
+
     assert c1.foo(c1.address) == True
     assert c1.foo(c2.address) == True
     assert c1.foo(t.a1) == False

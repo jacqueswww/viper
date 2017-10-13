@@ -284,9 +284,10 @@ class Stmt(object):
                 return LLLnode.from_list(['return', sub, get_size_of_type(self.context.return_type) * 32],
                             typ=None, pos=getpos(self.stmt))
             else:
+                print('STORAGE!!!')
                 new_sub = LLLnode.from_list(self.context.new_placeholder(self.context.return_type), typ=self.context.return_type, location='memory')
-                setter = make_setter(new_sub, sub, 'memory')
-                return LLLnode.from_list(['seq', setter, ['return', new_sub, get_size_of_type(self.context.return_type) * 32]],
+                setter = make_setter(new_sub, sub, 'memory', in_return=True, context=self.context)
+                return LLLnode.from_list(['seq', setter, ['return', new_sub, get_size_of_type(self.context.return_type, in_return=True) * 32]],
                                             typ=None, pos=getpos(self.stmt))
 
         else:

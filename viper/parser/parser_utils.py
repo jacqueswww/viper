@@ -332,7 +332,7 @@ def getpos(node):
 
 
 # Take a value representing a memory or storage location, and descend down to an element or member variable
-def add_variable_offset(parent, key):
+def add_variable_offset(parent, key, in_return=False):
     typ, location = parent.typ, parent.location
     if isinstance(typ, (StructType, TupleType)):
         if isinstance(typ, StructType):
@@ -364,7 +364,7 @@ def add_variable_offset(parent, key):
         elif location == 'memory':
             offset = 0
             for i in range(index):
-                offset += 32 * get_size_of_type(typ.members[attrs[i]])
+                offset += 32 * get_size_of_type(typ.members[attrs[i]], in_return=in_return)
             return LLLnode.from_list(['add', offset, parent],
                                      typ=typ.members[key],
                                      location='memory',
