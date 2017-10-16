@@ -281,31 +281,48 @@ class Stmt(object):
         # Returning a tuple.
         elif isinstance(sub.typ, TupleType):
 
-            new_sub = LLLnode.from_list(self.context.new_placeholder(self.context.return_type), typ=self.context.return_type, location='memory')
-            keyz = list(range(len(sub.typ.members)))
             subs = []
-            left_token = LLLnode.from_list('_loc', typ=new_sub.typ, location="memory")
+            dynamic_offset_counter = LLLnode(self.context.get_next_mem(), typ=None, annotation="dynamic_offset_counter")  # dynamic offset position counter.
+            new_sub = LLLnode.from_list(self.context.get_next_mem() + 32, typ=self.context.return_type, location='memory', annotation='new_sub')
+            keyz = list(range(len(sub.typ.members)))
             dynamic_offset_start = 32 * len(sub.args)  # The static list of args end.
-            dynamic_offset = dynamic_offset_start   # offset in return chunk, where dynamic block starts.
+            left_token = LLLnode.from_list('_loc', typ=new_sub.typ, location="memory")
+
+            def get_dynamic_offset_value():
+                return ['mload', dynamic_offset_counter]
+
+            def increment_dynamic_offset(dynamic_spot):
+                return ['mstore', dynamic_offset_counter,
+                                 ['add',
+                                        ['add', ['ceil32', ['mload', dynamic_spot]], 32],
+                                        ['mload', dynamic_offset_counter]]]
 
             for i, typ in enumerate(keyz):
                 arg = sub.args[i]
-
+                variable_offset = LLLnode.from_list(['add', 32 * i, left_token], typ=arg.typ, annotation='variable_offset')
                 if isinstance(arg.typ, ByteArrayType):
-                    variable_offset = add_variable_offset(left_token, typ)
-                    subs.append(['mstore', variable_offset, dynamic_offset])
-                    dynamic_spot = LLLnode.from_list(['add', left_token, dynamic_offset], location="memory", typ=arg.typ)
+                    subs.append(['mstore', variable_offset, get_dynamic_offset_value()])
+
+                    # Handle dynamic data.
+                    dynamic_spot = LLLnode.from_list(['add', left_token, get_dynamic_offset_value()], location="memory", typ=arg.typ, annotation='dyanmic_spot')
                     subs.append(make_setter(dynamic_spot, arg, location="memory"))
-                    dynamic_offset += 32 * get_size_of_type(arg.typ)
-                    print(dynamic_offset)
-                    print(dynamic_offset_start)
+                    subs.append(increment_dynamic_offset(dynamic_spot))
+
+                    # DEBUGGER:
+                    # subs.append(['mstore', variable_offset, get_dynamic_offset_value()])
+                    # break
+                    # dynamic_offset += 32 * get_size_of_type(arg.typ)
+                    # print(dynamic_offset)
+                    # print(dynamic_offset_start)
                 elif isinstance(arg.typ, BaseType):
-                    variable_offset = add_variable_offset(left_token, typ)
                     subs.append(make_setter(variable_offset, arg, "memory"))
                 else:
                     raise Exception("Can't return type %s as part of tuple", type(arg.typ))
 
-            setter = LLLnode.from_list(['with', '_loc', new_sub, ['seq'] + subs], typ=None)
+            setter = LLLnode.from_list(['seq',
+                ['mstore', dynamic_offset_counter, dynamic_offset_start],
+                ['with', '_loc', new_sub, ['seq'] + subs]], typ=None
+            )
 
             return LLLnode.from_list(['seq', setter, ['return', new_sub, get_size_of_type(self.context.return_type) * 32]],
                                         typ=None, pos=getpos(self.stmt))
