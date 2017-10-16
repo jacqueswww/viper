@@ -332,7 +332,7 @@ def getpos(node):
 
 
 # Take a value representing a memory or storage location, and descend down to an element or member variable
-def add_variable_offset(parent, key, in_return=False):
+def add_variable_offset(parent, key):
     typ, location = parent.typ, parent.location
     if isinstance(typ, (StructType, TupleType)):
         if isinstance(typ, StructType):
@@ -364,12 +364,13 @@ def add_variable_offset(parent, key, in_return=False):
         elif location == 'memory':
             offset = 0
             for i in range(index):
-                offset += 32 * get_size_of_type(typ.members[attrs[i]], in_return=in_return)
+                offset += 32 * get_size_of_type(typ.members[attrs[i]])
             return LLLnode.from_list(['add', offset, parent],
                                      typ=typ.members[key],
                                      location='memory',
                                      annotation=annotation)
         else:
+            import ipdb; ipdb.set_trace()
             raise TypeMismatchException("Not expecting a member variable access")
     elif isinstance(typ, (ListType, MappingType)):
         if isinstance(typ, ListType):

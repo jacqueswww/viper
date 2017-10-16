@@ -864,7 +864,7 @@ def parse_value_expr(expr, context):
 
 
 # Create an x=y statement, where the types may be compound
-def make_setter(left, right, location, in_return=False, context=None):
+def make_setter(left, right, location):
     # Basic types
     if isinstance(left.typ, BaseType):
         right = base_type_conversion(right, right.typ, left.typ)
@@ -874,12 +874,6 @@ def make_setter(left, right, location, in_return=False, context=None):
             return LLLnode.from_list(['mstore', left, right], typ=None)
     # Byte arrays
     elif isinstance(left.typ, ByteArrayType):
-        if in_return:
-            return LLLnode.from_list([
-                    'seq',
-                        make_byte_array_copier(left, right),
-                        ['mstore', left, 32],
-                ])
         return make_byte_array_copier(left, right)
     # Can't copy mappings
     elif isinstance(left.typ, MappingType):
@@ -956,8 +950,7 @@ def make_setter(left, right, location, in_return=False, context=None):
                 raise TypeMismatchException("Mismatched number of elements")
             subs = []
             for i, typ in enumerate(keyz):
-                variable_offset = add_variable_offset(left_token, typ, in_return=in_return)
-                subs.append(make_setter(variable_offset, right.args[i], location, in_return=in_return, context=context))
+                subs.append(make_setter(add_variable_offset(left_token, typ), right.args[i], location))
             return LLLnode.from_list(['with', '_L', left, ['seq'] + subs], typ=None)
         # If the right side is a null
         elif isinstance(right.typ, NullType):

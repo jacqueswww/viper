@@ -322,7 +322,7 @@ def get_size_of_type(typ, in_return=False):
         return 1
     elif isinstance(typ, ByteArrayType):
         return_offset = 1 if in_return else 0
-        return ceil32(typ.maxlen) // 32 + 2
+        return ceil32(typ.maxlen) // 32 + 2 + return_offset
     elif isinstance(typ, ListType):
         return get_size_of_type(typ.subtype) * typ.count
     elif isinstance(typ, MappingType):
