@@ -289,9 +289,11 @@ class Stmt(object):
             left_token = LLLnode.from_list('_loc', typ=new_sub.typ, location="memory")
 
             def get_dynamic_offset_value():
+                # Get value of dynamic offset counter.
                 return ['mload', dynamic_offset_counter]
 
             def increment_dynamic_offset(dynamic_spot):
+                # Increment dyanmic offset counter in memory.
                 return ['mstore', dynamic_offset_counter,
                                  ['add',
                                         ['add', ['ceil32', ['mload', dynamic_spot]], 32],
@@ -301,19 +303,14 @@ class Stmt(object):
                 arg = sub.args[i]
                 variable_offset = LLLnode.from_list(['add', 32 * i, left_token], typ=arg.typ, annotation='variable_offset')
                 if isinstance(arg.typ, ByteArrayType):
+                    # Store offset pointer value.
                     subs.append(['mstore', variable_offset, get_dynamic_offset_value()])
 
-                    # Handle dynamic data.
+                    # Store dynamic data, from offset pointer onwards.
                     dynamic_spot = LLLnode.from_list(['add', left_token, get_dynamic_offset_value()], location="memory", typ=arg.typ, annotation='dyanmic_spot')
                     subs.append(make_setter(dynamic_spot, arg, location="memory"))
                     subs.append(increment_dynamic_offset(dynamic_spot))
 
-                    # DEBUGGER:
-                    # subs.append(['mstore', variable_offset, get_dynamic_offset_value()])
-                    # break
-                    # dynamic_offset += 32 * get_size_of_type(arg.typ)
-                    # print(dynamic_offset)
-                    # print(dynamic_offset_start)
                 elif isinstance(arg.typ, BaseType):
                     subs.append(make_setter(variable_offset, arg, "memory"))
                 else:
@@ -324,7 +321,7 @@ class Stmt(object):
                 ['with', '_loc', new_sub, ['seq'] + subs]], typ=None
             )
 
-            return LLLnode.from_list(['seq', setter, ['return', new_sub, get_size_of_type(self.context.return_type) * 32]],
+            return LLLnode.from_list(['seq', setter, ['return', new_sub, get_dynamic_offset_value()]],
                                         typ=None, pos=getpos(self.stmt))
         else:
             raise TypeMismatchException("Can only return base type!", self.stmt)
