@@ -30,13 +30,14 @@ class EventSignature():
             for i in range(len(keys)):
                 typ = values[i]
                 arg = keys[i].id
+                import ipdb; ipdb.set_trace()
                 if isinstance(typ, ast.Call):
                     # Check to see if argument is a topic
                     if typ.func.id == 'indexed':
                         typ = values[i].args[0]
                         indexed_list.append(True)
                         topics_count += 1
-                    else:
+                    elif typ.func.id != 'num':
                         raise VariableDeclarationException("Only indexed keyword is allowed", arg)
                 else:
                     if hasattr(typ, 'left') and typ.left.id == 'bytes' and typ.comparators[0].n > 32:
@@ -58,6 +59,7 @@ class EventSignature():
                     pos += 32
                 else:
                     pos += get_size_of_type(parsed_type) * 32
+        import ipdb; ipdb.set_trace()
         sig = name + '(' + ','.join([canonicalize_type(arg.typ, True) for arg in args]) + ')'
         event_id = bytes_to_int(sha3(bytes(sig, 'utf-8')))
         return cls(name, args, indexed_list, event_id, sig)
