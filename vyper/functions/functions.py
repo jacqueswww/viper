@@ -421,6 +421,18 @@ def blockhash(expr, args, kwargs, contact):
                              typ=BaseType('bytes32'), pos=getpos(expr))
 
 
+def _check_rlp_param(subtyp):
+    if isinstance(subtyp, ByteArrayType):
+        if subtyp.maxlen > 32:
+            raise TypeMismatchException("Only byte arrays with maxlen less than 32 can be decoded")
+        else:
+            return
+    if not isinstance(subtyp, BaseType):
+        raise TypeMismatchException("RLP lists only accept BaseTypes and byte arrays", arg)
+    if not is_base_type(subtyp, ('int128', 'uint256', 'bytes32', 'address', 'bool')):
+        raise TypeMismatchException("Unsupported base type: %s" % subtyp.typ, arg)
+
+
 @signature('bytes', '*')
 def _RLPlist(expr, args, kwargs, context):
     # Second argument must be a list of types
@@ -437,10 +449,7 @@ def _RLPlist(expr, args, kwargs, context):
             subtyp = ByteArrayType(args[0].typ.maxlen)
         else:
             subtyp = parse_type(arg, 'memory')
-            if not isinstance(subtyp, BaseType):
-                raise TypeMismatchException("RLP lists only accept BaseTypes and byte arrays", arg)
-            if not is_base_type(subtyp, ('int128', 'uint256', 'bytes32', 'address', 'bool')):
-                raise TypeMismatchException("Unsupported base type: %s" % subtyp.typ, arg)
+            _check_rlp_param(subtyp)
         _format.append(subtyp)
     output_type = TupleType(_format)
     output_placeholder_type = ByteArrayType((2 * len(_format) + 1 + get_size_of_type(output_type)) * 32)
@@ -516,7 +525,7 @@ def _RLPlist(expr, args, kwargs, context):
         typ=None)
     # Shove the input data decoder in front of the first variable decoder
     decoder[0] = LLLnode.from_list(['seq', initial_setter, decoder[0]], typ=decoder[0].typ, location=decoder[0].location)
-    return LLLnode.from_list(["multi"] + decoder, typ=output_type, location='memory', pos=getpos(expr))
+    return LLLnode.from_list(["multi"] + decoder, typ=output_type, location='memory', pos=getpos(expr), debug=True)
 
 
 @signature('*', 'bytes')

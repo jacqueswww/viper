@@ -39,7 +39,8 @@ class NullAttractor():
 class LLLnode():
     repr_show_gas = False
 
-    def __init__(self, value, args=None, typ=None, location=None, pos=None, annotation='', mutable=True, add_gas_estimate=0):
+    def __init__(self, value, args=None, typ=None, location=None, pos=None, annotation='', 
+                 mutable=True, add_gas_estimate=0, debug=False):
         if args is None:
             args = []
 
@@ -52,6 +53,9 @@ class LLLnode():
         self.annotation = annotation
         self.mutable = mutable
         self.add_gas_estimate = add_gas_estimate
+        self.debug = debug
+        if debug:
+            print("DEBUGGGGGGGGGGGGGGG")
 
         # Determine this node's valency (1 if it pushes a value on the stack,
         # 0 otherwise) and checks to make sure the number and valencies of
@@ -210,7 +214,9 @@ class LLLnode():
         return self.repr()
 
     @classmethod
-    def from_list(cls, obj, typ=None, location=None, pos=None, annotation=None, mutable=True, add_gas_estimate=0):
+    def from_list(cls, obj, typ=None, location=None, pos=None, annotation=None, mutable=True, add_gas_estimate=0, debug=False):
+        if debug is True:
+            import ipdb; ipdb.set_trace()
         if isinstance(typ, str):
             typ = BaseType(typ)
         if isinstance(obj, LLLnode):
@@ -220,9 +226,14 @@ class LLLnode():
                 obj.location = location
             return obj
         elif not isinstance(obj, list):
-            return cls(obj, [], typ, location, pos, annotation, mutable, add_gas_estimate=add_gas_estimate)
+            return cls(
+                obj, [], typ, location, pos, annotation, mutable, add_gas_estimate=add_gas_estimate, debug=debug
+            )
         else:
-            return cls(obj[0], [cls.from_list(o, pos=pos) for o in obj[1:]], typ, location, pos, annotation, mutable, add_gas_estimate=add_gas_estimate)
+            return cls(
+                obj[0], [cls.from_list(o, pos=pos) for o in obj[1:]], 
+                typ, location, pos, annotation, mutable, add_gas_estimate=add_gas_estimate, debug=debug
+            )
 
 
 # Get a decimal number as a fraction with denominator multiple of 10

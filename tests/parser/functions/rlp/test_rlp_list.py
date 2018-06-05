@@ -109,3 +109,20 @@ def yolo(raw_utxo: bytes[1024]) -> (address, int128, int128):
     assert c.woo(rlp.encode([b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'10', b'11', b'12', b'13', b'14', b'15'])) == b'123456789101112131415'
     assert c.yolo(rlp.encode([w3.toBytes(hexstr=w3.eth.accounts[0]), 1, 2])) == [w3.eth.accounts[0], 1, 2]
     print('Passed RLP decoder tests')
+
+
+def test_rlp_decoder_fixed_byte_size(w3, assert_tx_failed, get_contract_with_gas_estimation, fake_tx):
+    fake_tx()
+
+    code = """
+@public
+def test(encoded_message: bytes[1024]) -> bytes[4]:
+    values = RLPList(encoded_message, [bytes])
+    sig: bytes[4] = values[0]
+    return sig
+    """
+    c = get_contract_with_gas_estimation(code)
+
+    encoded_message = rlp.encode([b"hi"])
+    import ipdb; ipdb.set_trace()
+    assert c.test(encoded_message) == "hi"

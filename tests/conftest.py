@@ -62,8 +62,8 @@ def set_evm_opcode_debugger():
     setattr(evm.vm.forks.byzantium.computation.ByzantiumComputation, 'opcodes', opcodes)
 
 # Useful options to comment out whilst working:
-# set_evm_verbose_logging()
-# set_evm_opcode_debugger()
+set_evm_verbose_logging()
+set_evm_opcode_debugger()
 
 
 @pytest.fixture(autouse=True)

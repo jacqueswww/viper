@@ -41,8 +41,16 @@ def compile_to_assembly(code, withargs=None, break_dest=None, height=0):
     if withargs is None:
         withargs = {}
 
+    # Debug node
+    if code.debug:
+        import ipdb; ipdb.set_trace()
+        o = []
+        for i, c in enumerate(code.args[::-1]):
+            o.extend(compile_to_assembly(c, withargs, break_dest, height + i))
+        o.append(code.value.upper())
+        return o
     # Opcodes
-    if isinstance(code.value, str) and code.value.upper() in opcodes:
+    elif isinstance(code.value, str) and code.value.upper() in opcodes:
         o = []
         for i, c in enumerate(code.args[::-1]):
             o.extend(compile_to_assembly(c, withargs, break_dest, height + i))
