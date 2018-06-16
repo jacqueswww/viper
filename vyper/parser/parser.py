@@ -410,11 +410,11 @@ def parse_external_contracts(external_contracts, _contracts):
     return external_contracts
 
 
-def parse_other_functions(o, otherfuncs, _globals, sigs, external_contracts, origcode, _custom_units, fallback_function, runtime_only):
+def parse_other_functions(o, otherfuncs, _globals, sigs, external_contracts, origcode, _custom_units, fallback_function, runtime_only, init_info):
     sub = ['seq', initializer_lll]
     add_gas = initializer_lll.gas
     for _def in otherfuncs:
-        sub.append(parse_func(_def, _globals, {**{'self': sigs}, **external_contracts}, origcode, _custom_units))  # noqa E999
+        sub.append(parse_func(_def, _globals, {**{'self': sigs}, **external_contracts}, origcode, _custom_units, init_info=init_info))  # noqa E999
         sub[-1].total_gas += add_gas
         add_gas += 30
         sig = FunctionSignature.from_definition(_def, external_contracts, custom_units=_custom_units)
@@ -422,7 +422,7 @@ def parse_other_functions(o, otherfuncs, _globals, sigs, external_contracts, ori
         sigs[sig.name] = sig
     # Add fallback function
     if fallback_function:
-        fallback_func = parse_func(fallback_function[0], _globals, {**{'self': sigs}, **external_contracts}, origcode, _custom_units)
+        fallback_func = parse_func(fallback_function[0], _globals, {**{'self': sigs}, **external_contracts}, origcode, _custom_units, init_info=init_info)
         sub.append(fallback_func)
     else:
         sub.append(LLLnode.from_list(['revert', 0, 0], typ=None, annotation='Default function'))
@@ -455,13 +455,17 @@ def parse_tree_to_lll(code, origcode, runtime_only=False):
     if _contracts:
         external_contracts = parse_external_contracts(external_contracts, _contracts)
     # If there is an init func...
+    init_info = {}
     if initfunc:
         o.append(['seq', initializer_lll])
-        o.append(parse_func(initfunc[0], _globals, {**{'self': sigs}, **external_contracts}, origcode, _custom_units))
+        init_lll = parse_func(initfunc[0], _globals, {**{'self': sigs}, **external_contracts}, origcode, _custom_units)
+        init_info['lll'] = init_lll
+        init_info['sig'] = FunctionSignature.from_definition(initfunc[0], sigs=sigs, custom_units=_custom_units)
+        o.append(init_lll)
     # If there are regular functions...
     if otherfuncs or defaultfunc:
         o = parse_other_functions(
-            o, otherfuncs, _globals, sigs, external_contracts, origcode, _custom_units, defaultfunc, runtime_only
+            o, otherfuncs, _globals, sigs, external_contracts, origcode, _custom_units, defaultfunc, runtime_only, init_info
         )
     return LLLnode.from_list(o, typ=None)
 
@@ -503,7 +507,7 @@ def make_clamper(datapos, mempos, typ, is_init=False):
 
 
 # Parses a function declaration
-def parse_func(code, _globals, sigs, origcode, _custom_units, _vars=None):
+def parse_func(code, _globals, sigs, origcode, _custom_units, _vars=None, init_info=None):
     if _vars is None:
         _vars = {}
     sig = FunctionSignature.from_definition(code, sigs=sigs, custom_units=_custom_units)
@@ -514,6 +518,7 @@ def parse_func(code, _globals, sigs, origcode, _custom_units, _vars=None):
     # Create a context
     context = Context(vars=_vars, globals=_globals, sigs=sigs,
                       return_type=sig.output_type, is_constant=sig.const, is_payable=sig.payable, origcode=origcode, custom_units=_custom_units)
+    context.init_info = init_info
     # Copy calldata to memory for fixed-size arguments
     copy_size = sum([32 if isinstance(arg.typ, ByteArrayType) else get_size_of_type(arg.typ) * 32 for arg in sig.args])
     context.next_mem += copy_size

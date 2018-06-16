@@ -600,10 +600,13 @@ class Expr(object):
         from .parser import (
             external_contract_call,
             pack_arguments,
+            # parse_expr,
+            # initializer_lll
         )
         from vyper.functions import (
             dispatch_table,
         )
+        # from vyper import compile_lll
         if isinstance(self.expr.func, ast.Name):
             function_name = self.expr.func.id
             if function_name in dispatch_table:
@@ -613,6 +616,21 @@ class Expr(object):
                 if function_name in self.context.sigs['self']:
                     err_msg += ". Did you mean self.{}?".format(function_name)
                 raise StructureException(err_msg, self.expr)
+        elif self.expr.func.attr == "copy" and self.expr.func.value.id == "self":  # create copy of current contract.
+            pass
+            # inargs, inargsize = pack_arguments(
+            #     self.context.init_info['sig'],
+            #     [parse_expr(arg, self.context) for arg in self.expr.args],
+            #     self.context,
+            #     pos=getpos(self.expr)
+            # )
+
+            # init_lll = [
+            #     'seq', initializer_lll, inargs, self.context.init_info['lll']
+            # ]
+            # init_bytecode = compile_lll.assembly_to_evm(compile_lll.compile_to_assembly())
+            # value = 0
+            # ['create', value, placeholder, 64]
         elif isinstance(self.expr.func, ast.Attribute) and isinstance(self.expr.func.value, ast.Name) and self.expr.func.value.id == "self":
             method_name = self.expr.func.attr
             if method_name not in self.context.sigs['self']:
