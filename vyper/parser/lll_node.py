@@ -89,9 +89,9 @@ class LLLnode():
                 # Dynamic gas cost: non-zero-valued call
                 if self.value.upper() == 'CALL' and self.args[2].value != 0:
                     self.gas += 34000
-                # Dynamic gas cost: filling sstore (ie. not clearing)
-                elif self.value.upper() == 'SSTORE' and self.args[1].value != 0:
-                    self.gas += 15000
+                # Dynamic gas cost: filling sstore
+                elif self.value.upper() == 'SSTORE' and self.args[1].value == 0:
+                    self.gas -= 15000
                 # Dynamic gas cost: calldatacopy
                 elif self.value.upper() in ('CALLDATACOPY', 'CODECOPY'):
                     size = 34000
@@ -143,7 +143,7 @@ class LLLnode():
                     rounds = self.args[2].value
                 else:
                     rounds = abs(self.args[2].value - self.args[1].value)
-                self.gas = rounds * (self.args[3].gas + 50) + 30
+                self.gas = rounds * (self.args[3].gas + 75) + 30
             # Seq statements: seq <statement> <statement> ...
             elif self.value == 'seq':
                 self.valency = self.args[-1].valency if self.args else 0
