@@ -622,7 +622,6 @@ class Stmt(object):
                         ),
                         self.stmt
                     )
-
             return gen_tuple_return(self.stmt, self.context, sub)
 
         else:
