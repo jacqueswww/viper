@@ -27,9 +27,9 @@ setup(
     tests_require=[
         'pytest',
         'pytest-cov',
-        'py-evm==0.2.0a32',
-        'eth-tester[py-evm]==0.1.0b32',
-        'web3==4.4.1',
+        'py-evm==0.2.0a34',
+        'eth-tester==0.1.0b33',
+        'web3==4.8.2',
     ],
     scripts=[
         'bin/vyper',
