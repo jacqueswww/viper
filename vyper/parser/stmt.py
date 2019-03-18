@@ -778,6 +778,7 @@ class Stmt(object):
         # Returning a value (most common case)
         if isinstance(sub.typ, BaseType):
             sub = unwrap_location(sub)
+            private_mem_zero = ['add', self.context.memory_allocator.start_position, 32]
 
             if not isinstance(self.context.return_type, BaseType):
                 raise TypeMismatchException(
@@ -805,8 +806,8 @@ class Stmt(object):
                     return LLLnode.from_list(
                         [
                             'seq',
-                            ['mstore', 0, sub],
-                            make_return_stmt(self.stmt, self.context, 0, 32)
+                            ['mstore', private_mem_zero, sub],
+                            make_return_stmt(self.stmt, self.context, private_mem_zero, 32)
                         ],
                         typ=None,
                         pos=getpos(self.stmt),
@@ -814,7 +815,7 @@ class Stmt(object):
                     )
             elif is_base_type(sub.typ, self.context.return_type.typ) or (is_base_type(sub.typ, 'int128') and is_base_type(self.context.return_type, 'int256')):  # noqa: E501
                 return LLLnode.from_list(
-                    ['seq', ['mstore', 0, sub], make_return_stmt(self.stmt, self.context, 0, 32)],
+                    ['seq', ['mstore', private_mem_zero, sub], make_return_stmt(self.stmt, self.context, private_mem_zero, 32)],
                     typ=None,
                     pos=getpos(self.stmt),
                     valency=0,

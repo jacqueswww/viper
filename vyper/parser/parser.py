@@ -24,6 +24,7 @@ from vyper.parser.lll_node import (
 )
 from vyper.parser.memory_allocator import (
     MemoryAllocator,
+    PrivateMemoryAllocator,
 )
 from vyper.parser.parser_utils import (
     base_type_conversion,
@@ -392,7 +393,11 @@ def parse_func(code, sigs, origcode, global_ctx, _vars=None):
         nonreentrant_post = [['sstore', nkey, 0]]
 
     # Create a local (per function) context.
-    memory_allocator = MemoryAllocator()
+
+    if sig.private:
+        memory_allocator = PrivateMemoryAllocator(['mload', MemoryPositions.MEMORY_OFFSET])
+    else:
+        memory_allocator = MemoryAllocator()
     context = Context(
         vars=_vars,
         global_ctx=global_ctx,
@@ -424,6 +429,12 @@ def parse_func(code, sigs, origcode, global_ctx, _vars=None):
     # function to jump to after a function has executed.
     _post_callback_ptr = "{}_{}_post_callback_ptr".format(sig.name, sig.method_id)
     if sig.private:
+        clampers.append(
+            LLLnode.from_list(
+                ['mstore', MemoryPositions.MEMORY_OFFSET, 'pass'],
+                annotation='load memory offset',
+            )
+        )
         context.callback_ptr = context.new_placeholder(typ=BaseType('uint256'))
         clampers.append(
             LLLnode.from_list(
@@ -628,14 +639,18 @@ def parse_func(code, sigs, origcode, global_ctx, _vars=None):
                     'if', sig_compare,
                     ['seq',
                         private_label,
-                        ['pass'] if not sig.private else LLLnode.from_list([
-                            'mstore',
-                            context.callback_ptr,
-                            'pass',
-                        ], annotation='pop callback pointer', pos=getpos(code)),
-                        ['seq'] + set_defaults if set_defaults else ['pass'],
-                        ['seq_unchecked'] + default_copiers if default_copiers else ['pass'],
-                        ['goto', _post_callback_ptr if sig.private else function_routine]]
+                        ['with', PRIVATE_MEMORY_OFFSET_NAME, ['pop'],
+                            ['seq',
+                            ['pass'] if not sig.private else LLLnode.from_list([
+                                'mstore',
+                                context.callback_ptr,
+                                'pass',
+                            ], annotation='pop callback pointer', pos=getpos(code)),
+                            ['seq'] + set_defaults if set_defaults else ['pass'],
+                            ['seq_unchecked'] + default_copiers if default_copiers else ['pass'],
+                            ['goto', _post_callback_ptr if sig.private else function_routine]]
+                        ]
+                    ]
                 ])
 
             # With private functions all variable loading occurs in the default
@@ -685,7 +700,7 @@ def parse_func(code, sigs, origcode, global_ctx, _vars=None):
 
     o.context = context
     o.total_gas = o.gas + calc_mem_gas(
-        o.context.memory_allocator.get_next_memory_position()
+        o.context.memory_allocator.get_size()
     )
     o.func_name = sig.name
     return o

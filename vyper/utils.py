@@ -93,7 +93,8 @@ class MemoryPositions:
     FREE_VAR_SPACE2 = 224
     BLANK_SPACE = 256
     FREE_LOOP_INDEX = 288
-    RESERVED_MEMORY = 320
+    MEMORY_OFFSET = 320
+    RESERVED_MEMORY = 352
 
 
 # Sizes of different data types. Used to clamp types.

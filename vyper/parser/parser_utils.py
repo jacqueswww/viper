@@ -757,6 +757,7 @@ def make_return_stmt(stmt, context, begin_pos, _size, loop_memory_position=None)
         label_id = '_'.join([str(x) for x in (context.method_id, stmt.lineno, stmt.col_offset)])
         exit_label = 'make_return_loop_exit_%s' % label_id
         start_label = 'make_return_loop_start_%s' % label_id
+        private_mem_alloc_start = ['add', context.memory_allocator.start_position, 32]
 
         # Push prepared data onto the stack,
         # in reverse order so it can be popped of in order.
@@ -764,6 +765,11 @@ def make_return_stmt(stmt, context, begin_pos, _size, loop_memory_position=None)
             # static values, unroll the mloads instead.
             mloads = [
                 ['mload', pos] for pos in range(begin_pos, _size, 32)
+            ]
+            return ['seq_unchecked'] + mloads + [['jump', ['mload', context.callback_ptr]]]
+        elif begin_pos == private_mem_alloc_start and _size == 32:
+            mloads = [
+                ['mload', private_mem_alloc_start]
             ]
             return ['seq_unchecked'] + mloads + [['jump', ['mload', context.callback_ptr]]]
         else:

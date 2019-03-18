@@ -21,6 +21,9 @@ from vyper.types import (
     ceil32,
     get_size_of_type,
 )
+from vyper.utils import (
+    MemoryPositions
+)
 
 
 def call_lookup_specs(stmt_expr, context):
@@ -66,31 +69,16 @@ def call_make_placeholder(stmt_expr, context, sig):
 def call_self_private(stmt_expr, context, sig):
     # ** Private Call **
     # Steps:
-    # (x) push current local variables
     # (x) push arguments
     # (x) push jumpdest (callback ptr)
+    # (x) push next_mem / end of allocator
     # (x) jump to label
     # (x) pop return values
-    # (x) pop local variables
 
     method_name, expr_args, sig = call_lookup_specs(stmt_expr, context)
     pre_init = []
-    pop_local_vars = []
-    push_local_vars = []
     pop_return_values = []
     push_args = []
-
-    # Push local variables.
-    if context.vars:
-        var_slots = [(v.pos, v.size) for name, v in context.vars.items()]
-        var_slots.sort(key=lambda x: x[0])
-        mem_from, mem_to = var_slots[0][0], var_slots[-1][0] + var_slots[-1][1] * 32
-        push_local_vars = [
-            ['mload', pos] for pos in range(mem_from, mem_to, 32)
-        ]
-        pop_local_vars = [
-            ['mstore', pos, 'pass'] for pos in reversed(range(mem_from, mem_to, 32))
-        ]
 
     # Push Arguments
     if expr_args:
@@ -132,7 +120,14 @@ def call_self_private(stmt_expr, context, sig):
 
     # Jump to function label.
     jump_to_func = [
-        ['add', ['pc'], 6],  # set callback pointer.
+        # Use mload to make callback pointer a fixed memory address, this allows the callback 
+        # pointer operations to be fixed, regardless how deep private calls are nested.
+        [   'mstore', 
+            MemoryPositions.FREE_LOOP_INDEX,
+            context.memory_allocator.get_next_memory_position()
+        ],
+        ['add', ['pc'], 10],  # set callback pointer.
+        ['mload', MemoryPositions.FREE_LOOP_INDEX],  # push end of memory pointer. 
         ['goto', 'priv_{}'.format(sig.method_id)],
         ['jumpdest'],
     ]
@@ -205,11 +200,9 @@ def call_self_private(stmt_expr, context, sig):
     call_body = list(itertools.chain(
         ['seq_unchecked'],
         pre_init,
-        push_local_vars,
         push_args,
         jump_to_func,
         pop_return_values,
-        pop_local_vars,
         [returner],
     ))
     # If we have no return, we need to pop off
