@@ -1,5 +1,8 @@
 import ast
 import functools
+from typing import (
+    List,
+)
 
 from vyper.exceptions import (
     EventDeclarationException,
@@ -27,13 +30,12 @@ from vyper.parser.memory_allocator import (
     PrivateMemoryAllocator,
 )
 from vyper.parser.parser_utils import (
+    annotate_and_optimize_ast,
     base_type_conversion,
     byte_array_to_num,
-    decorate_ast,
     getpos,
     make_byte_array_copier,
     make_setter,
-    resolve_negative_literals,
     unwrap_location,
 )
 from vyper.parser.pre_parser import (
@@ -75,15 +77,25 @@ if not hasattr(ast, 'AnnAssign'):
     raise Exception("Requires python 3.6 or higher for annotation support")
 
 
-# Converts code to parse tree
-def parse_to_ast(code):
-    class_names, code = pre_parse(code)
-    if '\x00' in code:
+def parse_to_ast(source_code: str) -> List[ast.stmt]:
+    """
+    Parses the given vyper source code and returns a list of python AST objects
+    for all statements in the source.  Performs pre-processing of source code
+    before parsing as well as post-processing of the resulting AST.
+
+    :param source_code: The vyper source code to be parsed.
+    :return: The post-processed list of python AST objects for each statement in
+        ``source_code``.
+    """
+    class_types, reformatted_code = pre_parse(source_code)
+
+    if '\x00' in reformatted_code:
         raise ParserException('No null bytes (\\x00) allowed in the source code.')
-    o = ast.parse(code)  # python ast
-    decorate_ast(o, code, class_names)  # decorated python ast
-    o = resolve_negative_literals(o)
-    return o.body
+
+    parsed_ast = ast.parse(reformatted_code)
+    annotate_and_optimize_ast(parsed_ast, reformatted_code, class_types)
+
+    return parsed_ast.body
 
 
 # Header code
