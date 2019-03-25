@@ -786,7 +786,7 @@ class Stmt(object):
         # Returning a value (most common case)
         if isinstance(sub.typ, BaseType):
             sub = unwrap_location(sub)
-            private_mem_zero = ['add', self.context.memory_allocator.start_position, 32]
+            private_mem_zero = self.context.memory_allocator.get_next_memory_position()
 
             if not isinstance(self.context.return_type, BaseType):
                 raise TypeMismatchException(

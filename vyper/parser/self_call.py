@@ -70,15 +70,38 @@ def call_self_private(stmt_expr, context, sig):
     # ** Private Call **
     # Steps:
     # (x) push arguments
+    # (x) store current mem offset
     # (x) push jumpdest (callback ptr)
     # (x) push next_mem / end of allocator
     # (x) jump to label
+    # (x) restore current mem offset 
     # (x) pop return values
 
     method_name, expr_args, sig = call_lookup_specs(stmt_expr, context)
-    pre_init = []
     pop_return_values = []
     push_args = []
+
+    # Push & current memory offset.
+    if context.is_private:
+        current_offset_placeholder = context.new_placeholder(BaseType('bytes32'))
+        store_memory_offset = [[
+            'mstore',
+            current_offset_placeholder,
+            ['mload', MemoryPositions.MEMORY_OFFSET]
+        ]]
+        restore_memory_offset = [
+            ['mstore', MemoryPositions.FREE_LOOP_INDEX, 'pass'],
+            [
+                # Last previous allocated value -
+                # is our current context memory offset.
+                'mstore',
+                MemoryPositions.MEMORY_OFFSET,
+                ['mload', ['sub', ['mload', MemoryPositions.FREE_LOOP_INDEX], 32]]
+            ]
+        ]
+    else:
+        store_memory_offset = [['pass']]
+        restore_memory_offset = [['pop', 'pass']]
 
     # Push Arguments
     if expr_args:
@@ -91,14 +114,18 @@ def call_self_private(stmt_expr, context, sig):
         )
         push_args += [inargs]  # copy arguments first, to not mess up the push/pop sequencing.
         static_arg_count = len(expr_args) * 32
-        static_pos = arg_pos + static_arg_count
+        if context.is_private:
+            static_pos = ['add', arg_pos, static_arg_count]
+        else:
+            static_pos = arg_pos + static_arg_count
         total_arg_size = ceil32(inargsize - 4)
 
+        i_placeholder = context.new_placeholder(BaseType('uint256'))
+
         if len(expr_args) * 32 != total_arg_size:  # requires dynamic section.
-            ident = 'push_args_%d_%d_%d' % (sig.method_id, stmt_expr.lineno, stmt_expr.col_offset)
+            ident = 'push_dyn_args_%d_%d_%d' % (sig.method_id, stmt_expr.lineno, stmt_expr.col_offset)
             start_label = ident + '_start'
             end_label = ident + '_end'
-            i_placeholder = context.new_placeholder(BaseType('uint256'))
             push_args += [
                 ['mstore', i_placeholder, arg_pos + total_arg_size],
                 ['label', start_label],
@@ -110,19 +137,36 @@ def call_self_private(stmt_expr, context, sig):
                 ],
                 ['mstore', i_placeholder, ['sub', ['mload', i_placeholder], 32]],  # decrease i
                 ['goto', start_label],
-                ['label', end_label]
+                ['label', end_label],
             ]
 
         # push static section
-        push_args += [
-            ['mload', pos] for pos in reversed(range(arg_pos, static_pos, 32))
-        ]
+        if context.is_private:  # calling from private.
+            ident = 'push_static_args_%d_%d_%d' % (sig.method_id, stmt_expr.lineno, stmt_expr.col_offset)
+            start_label = ident + '_start'
+            end_label = ident + '_end'
+            push_args += [
+                ['mstore', i_placeholder, static_pos],
+                ['label', start_label],
+                ['if', ['lt', ['mload', i_placeholder], arg_pos], ['goto', end_label]],
+                [
+                    'if_unchecked',
+                    ['ne', ['mload', ['mload', i_placeholder]], 0],
+                    ['mload', ['mload', i_placeholder]],
+                ],
+                ['mstore', i_placeholder, ['sub', ['mload', i_placeholder], 32]],  # decrease i
+                ['goto', start_label],
+                ['label', end_label],
+            ]
+        else:  # calling from public.
+            push_args += [
+                ['mload', pos] for pos in reversed(range(arg_pos, static_pos, 32))
+            ]
 
     # Jump to function label.
     jump_to_func = [
-        # Use mload to make callback pointer a fixed memory address, this allows the callback 
-        # pointer operations to be fixed, regardless how deep private calls are nested.
-        [   'mstore', 
+        [
+            'mstore',
             MemoryPositions.FREE_LOOP_INDEX,
             context.memory_allocator.get_next_memory_position()
         ],
@@ -199,9 +243,10 @@ def call_self_private(stmt_expr, context, sig):
 
     call_body = list(itertools.chain(
         ['seq_unchecked'],
-        pre_init,
         push_args,
+        store_memory_offset,
         jump_to_func,
+        restore_memory_offset,
         pop_return_values,
         [returner],
     ))

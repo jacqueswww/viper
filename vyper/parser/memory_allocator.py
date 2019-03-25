@@ -25,6 +25,10 @@ class MemoryAllocator:
     def get_next_memory_position(self) -> int:
         return self.next_mem
 
+    # Get effective memory position, from variable position.
+    def get_var_position(self, pos: int):
+        return self.start_position + pos
+
     # Grow memory by x bytes
     def increase_memory(self, size: int) -> Tuple[int, int]:
         if size % 32 != 0:
@@ -49,9 +53,12 @@ class PrivateMemoryAllocator:
         self.start_position = memory_offset_node
 
     def _add_offset(self, x):
-        return LLLnode.from_list([
-            'add', self.memory_offset_node, x - MemoryPositions.RESERVED_MEMORY
-        ])
+        return LLLnode.from_list(
+            [
+                'add', x - self.memory_allocator.start_position, self.memory_offset_node
+            ],
+            annotation=f'mem_offset:{x}'
+        )
 
     def increase_memory(self, size: int):
         before, after = self.memory_allocator.increase_memory(size)
@@ -63,6 +70,15 @@ class PrivateMemoryAllocator:
     def get_next_memory_position(self) -> LLLnode:
         o = self._add_offset(self.memory_allocator.get_next_memory_position())
         return o
+
+    # Get effective memory position, from variable position.
+    def get_var_position(self, pos: int):
+        return LLLnode.from_list(
+            [
+                'add', self.memory_offset_node, pos
+            ],
+            annotation=f'var_offset:{pos}'
+        )
 
     def get_size(self):
         return self.memory_allocator.get_size()

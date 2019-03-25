@@ -409,6 +409,13 @@ def pack_arguments(signature, args, context, pos, return_placeholder=True):
         maxlen=sum([get_size_of_type(arg.typ) for arg in signature.args]) * 32 + 32
     )
     placeholder = context.new_placeholder(placeholder_typ)
+
+    def add_to_placeholder(placeholder,val):
+        if context.is_private:  # calling from private function.
+            return ['add', placeholder, val]
+        else:  # calling from public function.
+            return placeholder + val
+
     setters = [['mstore', placeholder, signature.method_id]]
     needpos = False
     staticarray_offset = 0
@@ -426,7 +433,7 @@ def pack_arguments(signature, args, context, pos, return_placeholder=True):
     for i, (arg, typ) in enumerate(zip(args, [arg.typ for arg in signature.args])):
         if isinstance(typ, BaseType):
             setters.append(make_setter(LLLnode.from_list(
-                placeholder + staticarray_offset + 32 + i * 32,
+                add_to_placeholder(placeholder, staticarray_offset + 32 + i * 32),
                 typ=typ,
             ), arg, 'memory', pos=pos, in_function_call=True))
 
@@ -434,7 +441,7 @@ def pack_arguments(signature, args, context, pos, return_placeholder=True):
             setters.append(['mstore', placeholder + staticarray_offset + 32 + i * 32, '_poz'])
             arg_copy = LLLnode.from_list('_s', typ=arg.typ, location=arg.location)
             target = LLLnode.from_list(
-                ['add', placeholder + 32, '_poz'],
+                ['add', add_to_placeholder(placeholder, 32), '_poz'],
                 typ=typ,
                 location='memory',
             )
@@ -455,7 +462,7 @@ def pack_arguments(signature, args, context, pos, return_placeholder=True):
             if has_dynamic_data(typ):
                 raise TypeMismatchException("Cannot pack bytearray in struct")
             target = LLLnode.from_list(
-                [placeholder + 32 + staticarray_offset + i * 32],
+                [add_to_placeholder(placeholder, 32 + staticarray_offset + i * 32)],
                 typ=typ,
                 location='memory',
             )
@@ -480,13 +487,13 @@ def pack_arguments(signature, args, context, pos, return_placeholder=True):
                 ['seq'] + setters + returner
             ], typ=placeholder_typ, location='memory'),
             placeholder_typ.maxlen - 28,
-            placeholder + 32
+            add_to_placeholder(placeholder, 32)
         )
     else:
         return (
             LLLnode.from_list(['seq'] + setters + returner, typ=placeholder_typ, location='memory'),
             placeholder_typ.maxlen - 28,
-            placeholder + 32
+            add_to_placeholder(placeholder, 32)
         )
 
 
@@ -792,7 +799,14 @@ def make_return_stmt(stmt, context, begin_pos, _size, loop_memory_position=None)
         label_id = '_'.join([str(x) for x in (context.method_id, stmt.lineno, stmt.col_offset)])
         exit_label = 'make_return_loop_exit_%s' % label_id
         start_label = 'make_return_loop_start_%s' % label_id
-        private_mem_alloc_start = ['add', context.memory_allocator.start_position, 32]
+        jump_to_callback_ptr = [
+            # push current memory offset,
+            # so callee can restore context
+            # (previous memory offset is stored current_memory_offset - 1)
+            context.memory_allocator.start_position,
+            # jump to the callee.
+            ['jump', ['mload', context.callback_ptr]]
+        ]
 
         # Push prepared data onto the stack,
         # in reverse order so it can be popped of in order.
@@ -801,12 +815,13 @@ def make_return_stmt(stmt, context, begin_pos, _size, loop_memory_position=None)
             mloads = [
                 ['mload', pos] for pos in range(begin_pos, _size, 32)
             ]
-            return ['seq_unchecked'] + mloads + [['jump', ['mload', context.callback_ptr]]]
-        elif begin_pos == private_mem_alloc_start and _size == 32:
+            return ['seq_unchecked'] + mloads + jump_to_callback_ptr
+        # Optimisation for single word value.
+        elif _size == 32:
             mloads = [
-                ['mload', private_mem_alloc_start]
+                ['mload', begin_pos]
             ]
-            return ['seq_unchecked'] + mloads + [['jump', ['mload', context.callback_ptr]]]
+            return ['seq_unchecked'] + mloads + jump_to_callback_ptr
         else:
             mloads = [
                 'seq_unchecked',
@@ -829,7 +844,7 @@ def make_return_stmt(stmt, context, begin_pos, _size, loop_memory_position=None)
                 ['goto', start_label],
                 ['label', exit_label]
             ]
-            return ['seq_unchecked'] + [mloads] + [['jump', ['mload', context.callback_ptr]]]
+            return ['seq_unchecked'] + [mloads] + jump_to_callback_ptr
     else:
         return ['return', begin_pos, _size]
 
