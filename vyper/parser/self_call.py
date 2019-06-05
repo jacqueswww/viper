@@ -115,15 +115,32 @@ def call_self_private(stmt_expr, context, sig):
             start_label = ident + '_start'
             end_label = ident + '_end'
             i_placeholder = context.new_placeholder(BaseType('uint256'))
+
+            # Calculate copy start position.
+            # Given | static | dynamic | section in memory, copy backwards so the 
+            # values are in order on the stack. We calculate i, the end of the whole encoded part
+            # by taking the last ceil32(dynamic length value) + length memory position.
+            
+            for idx, arg in enumerate(expr_args):
+                if isinstance(arg.typ, ByteArrayLike):
+                    xs = [['with', 'offset', ['mload', arg_pos + idx * 32],
+                            ['with', 'len_pos', ['add', arg_pos, 'offset'],
+                                ['with', 'len_value', ['mload', 'len_pos'],
+                                    [ 'mstore',
+                                        i_placeholder,
+                                        ['add',
+                                            'len_pos',
+                                            ['ceil32', 'len_value']]
+                                    ]
+                                ]
+                            ]
+                        ]]
+
+            push_args += xs
             push_args += [
-                ['mstore', i_placeholder, arg_pos + total_arg_size],
                 ['label', start_label],
                 ['if', ['lt', ['mload', i_placeholder], static_pos], ['goto', end_label]],
-                [
-                    'if_unchecked',
-                    ['ne', ['mload', ['mload', i_placeholder]], 0],
-                    ['mload', ['mload', i_placeholder]],
-                ],
+                ['mload', ['mload', i_placeholder]],
                 ['mstore', i_placeholder, ['sub', ['mload', i_placeholder], 32]],  # decrease i
                 ['goto', start_label],
                 ['label', end_label]
