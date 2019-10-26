@@ -495,9 +495,9 @@ class Stmt(object):
 
     def _check_valid_range_constant(self, arg_ast_node, raise_exception=True):
         with self.context.range_scope():
-            # TODO should catch if raise_exception == False?
+            # TODO should catch if raise_exception == False?          
             arg_expr = Expr.parse_value_expr(arg_ast_node, self.context)
-
+        import ipdb; ipdb.set_trace()
         is_integer_literal = (
             isinstance(arg_expr.typ, BaseType) and arg_expr.typ.is_literal
         ) and arg_expr.typ.typ in {'uint256', 'int128'}
@@ -508,6 +508,49 @@ class Stmt(object):
             if raise_exception:
                 raise StructureException("Range only accepts literal (constant) values", arg_expr)
             return False, arg_expr
+
+    def _check_valid_range_statement(self):
+        is_invalid_for_statement = any((
+            not isinstance(self.stmt.iter, ast.Call),
+            not isinstance(self.stmt.iter.func, ast.Name),
+            not isinstance(self.stmt.target, ast.Name),
+            self.stmt.iter.func.id != "range",
+            len(self.stmt.iter.args) not in {1, 2},
+        ))
+        if is_invalid_for_statement:
+            raise StructureException((
+                "For statements must be of the form `for i in range(rounds): "
+                "..` or `for i in range(start, start + rounds): ..`"
+            ), self.stmt.iter)
+        if len(self.stmt.iter.args) == 1: # range(x)
+            self._check_valid_range_constant(self.stmt.iter.args[0])
+
+        elif len(self.stmt.iter.args) == 2:
+            arg0_is_constant = self._check_valid_range_constant(self.stmt.iter.args[0], raise_exception=False)[0]
+            arg1_is_constant = self._check_valid_range_constant(self.stmt.iter.args[1], raise_exception=False)[0]
+
+            if arg0_is_constant != arg1_is_constant: # range(x, x + 10)
+                arg0 = self.stmt.iter.args[0]
+                arg1 = self.stmt.iter.args[1]
+                if not isinstance(arg1, ast.BinOp) or not isinstance(arg1.op, ast.Add):
+                    raise StructureException(
+                        (
+                            "Two-arg for statements must be of the form `for i "
+                            "in range(start, start + rounds): ...`"
+                        ),
+                        arg1,
+                    )
+                if arg0 != arg1.left:
+                    raise StructureException(
+                        (
+                            "Two-arg for statements of the form `for i in "
+                            "range(x, x + y): ...` must have x identical in both "
+                            f"places: {ast_to_dict(arg0)} {ast_to_dict(arg1.left)}"
+                        ),
+                        self.stmt.iter,
+                    )
+            elif {arg0_is_constant, arg0_is_constant} != {True, True}:
+                raise StructureException("Invalid range structure", self.stmt)
 
     def _get_range_const_value(self, arg_ast_node):
         _, arg_expr = self._check_valid_range_constant(arg_ast_node)
@@ -521,18 +564,7 @@ class Stmt(object):
         if self._is_list_iter():
             return self.parse_for_list()
 
-        is_invalid_for_statement = any((
-            not isinstance(self.stmt.iter, ast.Call),
-            not isinstance(self.stmt.iter.func, ast.Name),
-            not isinstance(self.stmt.target, ast.Name),
-            self.stmt.iter.func.id != "range",
-            len(self.stmt.iter.args) not in {1, 2},
-        ))
-        if is_invalid_for_statement:
-            raise StructureException((
-                "For statements must be of the form `for i in range(rounds): "
-                "..` or `for i in range(start, start + rounds): ..`"
-            ), self.stmt.iter)
+        self._check_valid_range_statement()
 
         block_scope_id = id(self.stmt)
         with self.context.make_blockscope(block_scope_id):
@@ -556,25 +588,6 @@ class Stmt(object):
             # Type 3 for, e.g. for i in range(x, x + 10): ...
             else:
                 arg1 = self.stmt.iter.args[1]
-                if not isinstance(arg1, ast.BinOp) or not isinstance(arg1.op, ast.Add):
-                    raise StructureException(
-                        (
-                            "Two-arg for statements must be of the form `for i "
-                            "in range(start, start + rounds): ...`"
-                        ),
-                        arg1,
-                    )
-
-                if arg0 != arg1.left:
-                    raise StructureException(
-                        (
-                            "Two-arg for statements of the form `for i in "
-                            "range(x, x + y): ...` must have x identical in both "
-                            f"places: {ast_to_dict(arg0)} {ast_to_dict(arg1.left)}"
-                        ),
-                        self.stmt.iter,
-                    )
-
                 rounds = self._get_range_const_value(arg1.right)
                 start = Expr.parse_value_expr(arg0, self.context)
 
